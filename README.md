@@ -35,5 +35,5 @@
 |Immutable | Serial Alpha (100-999) | 900 | # |
 |Immutable | Serial OG (10-99) | 90 | # |
 |Immutable | Serial Founder (1-9) | 9 | # |
-|Immutable | The One (1) | 1 | # |
+|Immutable | The One (0) | 1 | # |
 
