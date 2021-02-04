@@ -1,1 +1,2 @@
-# ec_traits
+# Tests and calculations for the ehter.cards traits system
+
