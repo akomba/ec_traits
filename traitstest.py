@@ -29,7 +29,22 @@ TRAITS=[
 # "MISC Virgin": {"chance":?, "type": "#"},
 
 
+# types of features:
+# COMMON TRAITS: random chance to get any of these, no upper limit. can be revealed at minting time
+# LIMITED TRAITS: only limited number is available. Will be pre-determined. Hidden until all 10k cards sold.
+# IMMUTABLE TRAITS: deterministically assinged based on characteristics, for example by number of digits in serial number
+# BONUSES: extra treats issued automatically, for example blind bags and tickets. 
+
+
 # we issue 10,000 cards and calculate the chances of traits on each card
+
+# handling limited issuance traits can be done by pre-determining what serial cards will get it
+# that is easy -- the difficult part is to hide that from the people before the issuance is over
+# it can be done -- this is exactly what hashmasks did
+# the cards' traits were pre-determined, but hidden until all cards were sold
+# we need to do the same with the limited traits
+
+
 
 
 
