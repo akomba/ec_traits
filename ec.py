@@ -39,7 +39,6 @@ CHANCES={
         "Beta":1
         }
 
-
 # "MISC Virgin": {"chance":?, "type": "#"},
 
 
@@ -66,6 +65,19 @@ CHANCES={
 # The Orwells
 
 CARD_COUNTER = 10000
+TOTAL_OG = 90
+TOTAL_ALPHA = 900
+
+OG_MAX_PRICE = 10
+OG_MIN_PRICE = 1
+
+ALPHA_MAX_PRICE = 5
+ALPHA_MIN_PRICE = 1
+
+COMMON_MAX_PRICE = 3
+COMMON_MIN_PRICE = 0.1
+
+
 cards=[]
 available_cards=[]
 available_og=[]
@@ -123,6 +135,33 @@ images = [
 
 #===============================================================
 
+def get_price(ctype):
+    # OG cards go from E1 to E15
+    # Alpha cards go from E0.5 to E7
+    # Random cards go from E0.1 to E5
+
+    if ctype == "OG":
+        max_price = OG_MAX_PRICE
+        available = len(available_og)
+        min_price = OG_MIN_PRICE
+        total = TOTAL_OG
+    elif ctype == "Alpha":
+        max_price = ALPHA_MAX_PRICE
+        available = len(available_alpha)
+        min_price = ALPHA_MIN_PRICE
+        total = TOTAL_ALPHA
+    else:
+        max_price = COMMON_MAX_PRICE
+        available = len(available_cards)
+        min_price = COMMON_MIN_PRICE
+        total = CARD_COUNTER
+
+    increment = float(max_price / total)
+    price = float(((total - available) * increment) + min_price)
+    return(price)
+
+#===============================================================
+
 def initiate_image_decider():
     for image in images:
         l = image[0]
@@ -156,7 +195,7 @@ def select_visuals():
 def pre_populate():
     # pre-populating cards
     for c in range(CARD_COUNTER):
-        card = {"#":c,"series":None,"limited":[], "traits":[], "common":[], "immutable":[], "subtypes":[], "visuals":{}, "sold":False, "tickets":None, "bags":None}
+        card = {"#":c,"series":None,"limited":[], "traits":[], "common":[], "immutable":[], "subtypes":[], "visuals":{}, "sold":False, "tickets":None, "bags":None, "price":None}
         # trait by serial
         if c == 0:
             card["series"] = "The One"
@@ -223,14 +262,21 @@ def load_cards():
 def save_cards(c=False):
     pickle.dump( cards, open( "cards.p", "wb" ) )
 
+###################################
+#
+# BUY CARD
+#
+###################################
 
 def buy_card(ctype="any"):
     global cards
 
+
+
     a = available_cards
-    if ctype == "og":
+    if ctype == "OG":
         a = available_og
-    elif ctype == "alpha":
+    elif ctype == "Alpha":
         a = available_alpha
 
     if len(a) == 0:
@@ -239,7 +285,7 @@ def buy_card(ctype="any"):
 
     c = random.choice(a)
 
-
+    cards[c]["price"] =  get_price(ctype)
     cards[c]["visuals"] = select_visuals()
     
     for trait in TRAITS:
@@ -254,7 +300,6 @@ def buy_card(ctype="any"):
                     cards[c]["subtypes"].append(trait["subtype"])
                     cards[c]["traits"].append(trait["name"])
                     cards[c]["common"].append(trait["name"])
-    #print(cards[c])
 
     cards[c]["sold"] = True;
 
@@ -286,14 +331,19 @@ def fullstats():
     # stats
     global cards
     load_cards()
-    
+   
+    price = 0
     # occurences
     for card in cards:
+        price = float(price + card["price"])
         for trait in TRAITS:
             if trait["name"] in card["traits"]:
                 trait["occurence"]+=1
 
 
+
+    print("==================")
+    print("ETH collected:",price)
 
     print("==================")
     print("Available cards:", len(available_cards))
@@ -309,37 +359,6 @@ def fullstats():
     traitstats("OG")
     traitstats("Alpha")
     traitstats("Beta")
-
-
-    #print("larger combos")
-    #large_combos=[[],[],[],[],[],[],[],[]]
-    #for card in cards:
-    #    if len(card["traits"])> 3:
-    #        large_combos[len(card["traits"])].append(card)
-
-    #for c in range(len(large_combos)):
-    #    if len(large_combos[c]) > 0:
-    #        print("cards with ",c," traits:")
-    #        for card in large_combos[c]:
-    #            print(card)
-
-
-
-    # TODO 
-    # implement pricing
-    # implement image
-    # implement graphics
-    # implement eth logo graphics
-
-    # functions
-
-    # mint_card
-    # optional parameter: OG, Alpha
-    # prepopulate
-    # load data
-    # mint all cards
-    # stats
-
 
 def traitstats(name):
     
@@ -375,6 +394,11 @@ def traitstats(name):
 
 
 def buy_single(ctype="any"):
+    if ctype == "og":
+        ctype = "OG"
+    if ctype == "alpha":
+        ctype = "Alpha"
+
     load_cards()
     c = buy_card(ctype)
     save_cards()
