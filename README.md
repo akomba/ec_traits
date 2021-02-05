@@ -48,7 +48,17 @@ python ec.py init
 
 Buy a card:
 ```
-python ec.by buy
+python ec.py buy
+```
+
+Buy an OG card:
+```
+python ec.py buy og
+```
+
+Buy an alpha card:
+```
+python ec.py buy alpha
 ```
 
 Buy all cards:
