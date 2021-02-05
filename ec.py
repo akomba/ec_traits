@@ -31,6 +31,15 @@ TRAITS=[
     {"type": "limited",   "subtype": "orw",   "name": "The Orwellians",       "chance":1984, "occurence":0 }
     ]
 
+CHANCES={
+        "The One":1,
+        "Founder":1,
+        "OG":3,
+        "Alpha":2,
+        "Beta":1
+        }
+
+
 # "MISC Virgin": {"chance":?, "type": "#"},
 
 
@@ -147,32 +156,27 @@ def select_visuals():
 def pre_populate():
     # pre-populating cards
     for c in range(CARD_COUNTER):
-        card = {"#":c,"limited":[], "traits":[], "common":[], "immutable":[], "subtypes":[], "visuals":{}, "sold":False}
+        card = {"#":c,"series":None,"limited":[], "traits":[], "common":[], "immutable":[], "subtypes":[], "visuals":{}, "sold":False, "tickets":None, "bags":None}
         # trait by serial
         if c == 0:
-            card["traits"].append("The One")
-            card["immutable"].append("The One")
+            card["series"] = "The One"
         elif c<10:
-            card["traits"].append("Founder")
-            card["immutable"].append("Founder")
+            card["series"] = "Founder"
         elif c<100:
-            card["traits"].append("OG")
-            card["immutable"].append("OG")
+            card["series"] = "OG"
         elif c<1000:
-            card["traits"].append("Alpha")
-            card["immutable"].append("Alpha")
+            card["series"] = "Alpha"
         else:
-            card["traits"].append("Beta")
-            card["immutable"].append("Beta")
+            card["series"] = "Beta"
         cards.append(card)
 
     # pre-generate the array that is used to pre-generate limiteds
     limited_decider = []
     for card in cards:
-        if "OG" in card["traits"]:
+        if card["series"] == "OG":
             limited_decider.append(card["#"])
             limited_decider.append(card["#"])
-        elif "Alpha" in card["traits"]:
+        elif card["series"] == "Alpha":
             limited_decider.append(card["#"])
         limited_decider.append(card["#"])
 
@@ -211,9 +215,9 @@ def load_cards():
     for card in cards:
         if not card["sold"]:
             available_cards.append(card["#"])
-            if "OG" in card["traits"]:
+            if card["series"] == "OG":
                 available_og.append(card["#"])
-            if "Alpha" in card["traits"]:
+            if card["series"] == "Alpha":
                 available_alpha.append(card["#"])
 
 def save_cards(c=False):
@@ -244,11 +248,7 @@ def buy_card(ctype="any"):
             # calculate chance
             if trait["type"] == "common":
                 r =randint(0,100)
-                chance = trait["chance"]
-                if "OG" in cards[c]["traits"]:
-                    chance = chance * 3
-                elif "Alpha" in cards[c]["traits"]:
-                    chance = chance * 2
+                chance = trait["chance"] * CHANCES[cards[c]["series"]]
 
                 if r <= chance:
                     cards[c]["subtypes"].append(trait["subtype"])
@@ -346,7 +346,7 @@ def traitstats(name):
     trait_counts=[0,0,0,0,0,0,0,0,0]
     counter = 0
     for card in cards:
-        if name == "any" or name in card["traits"]:
+        if name == "any" or card["series"] == name:
             counter += 1
             common_traits= len(card["common"])
             limited_traits= len(card["limited"])

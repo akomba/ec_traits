@@ -39,4 +39,29 @@
 
 
 
+# How to use
 
+Init the database:
+```
+python ec.py init
+```
+
+Buy a card:
+```
+python ec.by buy
+```
+
+Buy all cards:
+```
+python ec.py buyall
+```
+
+Stats:
+```
+python ec.py stats
+```
+
+Remove db and restarts:
+```
+rm cards.p
+```
