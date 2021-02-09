@@ -1,13 +1,14 @@
-# Tests and calculations for the ehter.cards traits system
+# Tests and calculations for the ether.cards traits system
 
 
-# types of features:
+## types of features:
+
 * COMMON TRAITS: random chance to get any of these, no upper limit. can be revealed at minting time
 * LIMITED TRAITS: only limited number is available. Will be pre-determined. Hidden until all 10k cards sold.
 * IMMUTABLE TRAITS: deterministically assinged based on characteristics, for example by number of digits in serial number
 * BONUSES: extra treats issued automatically, for example blind bags and tickets. 
 
-# TABLE
+## TABLE
 
 | Trait Type | Name | Chance | Type |
 |---|---|---|---|
@@ -39,39 +40,46 @@
 
 
 
-# How to use
+## How to use
 
 Init the database:
-```
+
+``` sh
 python ec.py init
 ```
 
 Buy a card:
-```
+
+``` sh
 python ec.py buy
 ```
 
 Buy an OG card:
-```
+
+``` sh
 python ec.py buy og
 ```
 
 Buy an alpha card:
-```
+
+``` sh
 python ec.py buy alpha
 ```
 
 Buy all cards:
-```
+
+``` sh
 python ec.py buyall
 ```
 
 Stats:
-```
+
+``` sh
 python ec.py stats
 ```
 
 Remove db and restarts:
-```
+
+``` sh
 rm cards.p
 ```

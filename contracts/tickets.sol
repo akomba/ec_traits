@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.7.0;
 
+import "./interfaces/IRNG.sol";
+
 contract ethercards {
+
+    IRNG rng;
 
     enum CardType { OG, Alpha, Regular } 
     enum FrameType { Common, Silver, Gold, Epic } 
@@ -39,11 +43,17 @@ contract ethercards {
     uint256 regularOrdersProcessed;
     uint256 alphaOrdersProcessed;
     uint256 ogOrdersProcessed;
-    uint256 waiting;
+    uint256 nextTokenId;
     uint256 orderId = 1;
     //
     // Random Stuff
-    uint256 random;
+    mapping (uint256 => bytes32) randomRequests;
+    uint256                     lastRandomRequested;
+    uint256                     lastRandomProcessed;
+    //
+    // METADATA
+    //
+    mapping (uint256 => uint16) metadataPointer;
     //
     // arrays of 10,000 traits some revealed in advance and some revealed after the drawing
     uint32    []traits;         // revealed after all are drawn
@@ -56,119 +66,115 @@ contract ethercards {
     // 14 & 15 : frame   (4 / 4)
     // 16 - 20 : picture (32 / 32)
     // 21 - 22 : card type (3 / 4)
+    //
+    
 
     event OG_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
     event ALPHA_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
     event REGULAR_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
 
     function buyCard(CardType ct) public payable {
-        processRandom();
-        waiting++;
+        request_random();
+        mint(msg.sender,nextTokenId);
         if (ct == CardType.OG) {
             require (msg.value >= OG_PRICE, "Insuffient value");
             require (ogDemand++ < ogs.length, "No OG tickets available");
-            ogOrders.push(msg.sender);
+            ogOrders.push(nextTokenId++);
             emit OG_Ordered(msg.sender, msg.value, ogDemand, orderId++);
             return;
         } 
         if (ct == CardType.Alpha){ 
             require (msg.value >= ALPHA_PRICE, "Insuffient value");
             require (alphaDemand++ < alphas.length,"No ALPHA tickets available");
-            alphaOrders.push(msg.sender);
+            alphaOrders.push(nextTokenId++);
             emit ALPHA_Ordered(msg.sender, msg.value, alphaDemand, orderId++);
             return;
         }
         require(msg.value >= REGULAR_PRICE, "Insuffient value");
         require (regularDemand++ < regulars.length,"No ALPHA tickets available");
-        regularOrders.push(msg.sender);
+        regularOrders.push(nextTokenId++);
         emit REGULAR_Ordered(msg.sender, msg.value, regularDemand, orderId++);
         return;
     }
 
-    function processRandom() internal {
-        if (waiting == 0) return;
-        if (random == 0 && !randomAvailable()) {
-            request_random();
-            return;
-        }
-        if (random == 0) random = nextRandom();
+    function processRandom() external {
+        uint random = nextRandom();
         if (ogOrders.length > ogOrdersProcessed) {
-            address toProcess = ogOrders[ogOrdersProcessed++];
+            uint16 toProcess = ogOrders[ogOrdersProcessed++];
             sellCard(toProcess,CardType.OG,random);
-            random = random >> 16;
             return;
         }
         if (alphaOrders.length > alphaOrdersProcessed) {
-            address toProcess = alphaOrders[alphaOrdersProcessed++];
+            uint16 toProcess = alphaOrders[alphaOrdersProcessed++];
             sellCard(toProcess,CardType.ALPHA,random);
             return;
         }
         if (regularOrders.length > regularOrdersProcessed) {
-            address toProcess = regularOrders[regularOrdersProcessed++];
+            uint16 toProcess = regularOrders[regularOrdersProcessed++];
             sellCard(toProcess,CardType.REGULAR,random);
         }
     }
 
 
-    function sellCard(address owner, CardType buyer, uint256 rand)  internal{
-        waiting--;
+    function sellCard(uint16 tokenId, CardType buyer, uint256 rand)  internal{
         uint pos = rand;
         if (buyer == CardType.OG) {
-            markOgCardAsSold(owner,pos);
+            markOgCardAsSold(tokenId,pos);
             return;
         }
         if (buyer == CardType.Alpha) {
             if (pos < ogs.length - ogDemand) {
-                markOgCardAsSold(owner,pos);
+                markOgCardAsSold(tokenId,pos);
                 alphaDemand--;
                 ogDemand++;
                 return;
             }
             pos -= ogs.length - ogDemand;
-            markAlphaCardAsSold(owner,pos);
+            markAlphaCardAsSold(tokenId,pos);
             return;
         }
         if (pos < ogs.length - ogDemand) {
-            markOgCardAsSold(owner,pos);
+            markOgCardAsSold(tokenId,pos);
             regularDemand--;
             ogDemand++;
             return;
         }
         pos -= ogs.length - ogDemand;
         if (pos < alphas.length - alphaDemand) {
-            markAlphaCardAsSold(owner,pos);
+            markAlphaCardAsSold(tokenId,pos);
             regularDemand--;
             alphaDemand++;
             return;
         }
         pos -= alphas.length - alphaDemand;
-        markRegularCardAsSold(owner,pos);
+        markRegularCardAsSold(tokenId,pos);
     }
 
-    function markOgCardAsSold(address owner, uint pos) internal {
-    uint last = ogs.length - 1;
-    uint tokenId = uint256(ogs[pos]);
-    ogs[pos] = ogs[last];
-    _mint(owner, tokenId);
-}
+    function markOgCardAsSold(uint16 tokenId, uint pos) internal {
+        uint last = ogs.length - 1;
+        uint value = uint256(ogs[pos]);
+        ogs[pos] = ogs[last];
+        metadataPointer[tokenId] = value;
+    }
 
-function markAlphaCardAsSold(address owner, uint pos) internal {
-    uint last = alphas.length - 1;
-    uint tokenId = uint256(alphas[pos]);
-    alphas[pos] = alphas[last];
-    _mint(owner, tokenId);
-}
+    function markAlphaCardAsSold(uint16 tokenId, uint pos) internal {
+        uint last = alphas.length - 1;
+        uint value = uint256(alphas[pos]);
+        alphas[pos] = alphas[last];
+        metadataPointer[tokenId] = value;
+    }
 
-function markRegularCardAsSold(address owner, uint pos) internal {
-    uint last = regulars.length - 1;
-    uint tokenId = uint256(regulars[pos]);
-    regulars[pos] = regulars[last];
-    _mint(owner, tokenId);
-}
-    
-    constructor(uint16[] memory _alphas, uint16[] memory _ogs, uint24[] memory _cardfixed, bytes32 _cfHash) {
+    function markRegularCardAsSold(uint16 tokenId, uint pos) internal {
+        uint last = regulars.length - 1;
+        uint value = uint256(regulars[pos]);
+        regulars[pos] = regulars[last];
+        metadataPointer[tokenId] = value;
+    }
+        
+    constructor(uint16[] memory _alphas, uint16[] memory _ogs, uint24[] memory _cardfixed, bytes32 _cfHash, IRNG _rng) {
         bytes32 hash = keccak256(abi.encodePacked(_cardfixed));
         require(hash == _cfHash, "Data not valid");
+        rng = _rng;
         cardfixed = _cardfixed;
         alphas = _alphas;
         ogs = _ogs;
@@ -198,15 +204,16 @@ function markRegularCardAsSold(address owner, uint pos) internal {
     // Random number stuff
 
     function randomAvailable() internal view returns (bool) {
-        return false;
+        return (lastRandomRequested > lastRandomProcessed) && rng.isRequestComplete(randomRequests[lastRandomProcessed]);
     }
 
     function nextRandom() internal returns (uint256) {
-        return 1;
+        require(randomAvailable(),"Nothing to process");
+        return rng.randomNumber(randomRequests[lastRandomProcessed++]);
     }
 
     function request_random() internal {
-
+        (randomRequests[lastRandomRequested++],) = rng.requestRandomNumber();
     }
 
     // View Function to get graphic properties
