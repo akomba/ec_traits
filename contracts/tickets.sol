@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.7.0;
 
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "./interfaces/IRNG.sol";
 
-contract ethercards {
+contract ethercards is ERC721 {
 
     IRNG rng;
 
@@ -47,7 +49,7 @@ contract ethercards {
     uint256 orderId = 1;
     //
     // Random Stuff
-    mapping (uint256 => bytes32) randomRequests;
+    mapping (uint256 => uint32) randomRequests;
     uint256                     lastRandomRequested;
     uint256                     lastRandomProcessed;
     //
@@ -75,7 +77,7 @@ contract ethercards {
 
     function buyCard(CardType ct) public payable {
         request_random();
-        mint(msg.sender,nextTokenId);
+        _mint(msg.sender,nextTokenId);
         if (ct == CardType.OG) {
             require (msg.value >= OG_PRICE, "Insuffient value");
             require (ogDemand++ < ogs.length, "No OG tickets available");
@@ -100,78 +102,78 @@ contract ethercards {
     function processRandom() external {
         uint random = nextRandom();
         if (ogOrders.length > ogOrdersProcessed) {
-            uint16 toProcess = ogOrders[ogOrdersProcessed++];
+            uint256 toProcess = ogOrders[ogOrdersProcessed++];
             sellCard(toProcess,CardType.OG,random);
             return;
         }
         if (alphaOrders.length > alphaOrdersProcessed) {
-            uint16 toProcess = alphaOrders[alphaOrdersProcessed++];
-            sellCard(toProcess,CardType.ALPHA,random);
+            uint256 toProcess = alphaOrders[alphaOrdersProcessed++];
+            sellCard(toProcess,CardType.Alpha,random);
             return;
         }
         if (regularOrders.length > regularOrdersProcessed) {
-            uint16 toProcess = regularOrders[regularOrdersProcessed++];
-            sellCard(toProcess,CardType.REGULAR,random);
+            uint256 toProcess = regularOrders[regularOrdersProcessed++];
+            sellCard(toProcess,CardType.Regular,random);
         }
     }
 
 
-    function sellCard(uint16 tokenId, CardType buyer, uint256 rand)  internal{
+    function sellCard(uint256 tokenId, CardType buyer, uint256 rand)  internal{
         uint pos = rand;
         if (buyer == CardType.OG) {
-            markOgCardAsSold(tokenId,pos);
+            markOgCardAsSold(uint16(tokenId),pos);
             return;
         }
         if (buyer == CardType.Alpha) {
             if (pos < ogs.length - ogDemand) {
-                markOgCardAsSold(tokenId,pos);
+                markOgCardAsSold(uint16(tokenId),pos);
                 alphaDemand--;
                 ogDemand++;
                 return;
             }
             pos -= ogs.length - ogDemand;
-            markAlphaCardAsSold(tokenId,pos);
+            markAlphaCardAsSold(uint16(tokenId),pos);
             return;
         }
         if (pos < ogs.length - ogDemand) {
-            markOgCardAsSold(tokenId,pos);
+            markOgCardAsSold(uint16(tokenId),pos);
             regularDemand--;
             ogDemand++;
             return;
         }
         pos -= ogs.length - ogDemand;
         if (pos < alphas.length - alphaDemand) {
-            markAlphaCardAsSold(tokenId,pos);
+            markAlphaCardAsSold(uint16(tokenId),pos);
             regularDemand--;
             alphaDemand++;
             return;
         }
         pos -= alphas.length - alphaDemand;
-        markRegularCardAsSold(tokenId,pos);
+        markRegularCardAsSold(uint16(tokenId),pos);
     }
 
     function markOgCardAsSold(uint16 tokenId, uint pos) internal {
         uint last = ogs.length - 1;
-        uint value = uint256(ogs[pos]);
+        uint16 value = (ogs[pos]);
         ogs[pos] = ogs[last];
         metadataPointer[tokenId] = value;
     }
 
     function markAlphaCardAsSold(uint16 tokenId, uint pos) internal {
         uint last = alphas.length - 1;
-        uint value = uint256(alphas[pos]);
+        uint16 value = (alphas[pos]);
         alphas[pos] = alphas[last];
         metadataPointer[tokenId] = value;
     }
 
     function markRegularCardAsSold(uint16 tokenId, uint pos) internal {
         uint last = regulars.length - 1;
-        uint value = uint256(regulars[pos]);
+        uint16 value = (regulars[pos]);
         regulars[pos] = regulars[last];
         metadataPointer[tokenId] = value;
     }
         
-    constructor(uint16[] memory _alphas, uint16[] memory _ogs, uint24[] memory _cardfixed, bytes32 _cfHash, IRNG _rng) {
+    constructor(uint16[] memory _alphas, uint16[] memory _ogs, uint24[] memory _cardfixed, bytes32 _cfHash, IRNG _rng) ERC721("Ether Cards Foundation","ETHERCARD") {
         bytes32 hash = keccak256(abi.encodePacked(_cardfixed));
         require(hash == _cfHash, "Data not valid");
         rng = _rng;
