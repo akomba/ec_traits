@@ -153,9 +153,11 @@ contract ethercards is ERC721 {
     }
 
     function markOgCardAsSold(uint16 tokenId, uint pos) internal {
-        uint last = ogs.length - 1;
+        uint last = ogs.length - 1; // need to do a % and must pop ogs
+        pos = pos % ogs.length;
         uint16 value = (ogs[pos]);
         ogs[pos] = ogs[last];
+        ogs.pop();
         metadataPointer[tokenId] = value;
     }
 
@@ -183,7 +185,7 @@ contract ethercards is ERC721 {
         uint alphaPos;
         uint ogPos;
         for (uint j = 0; j < _cardfixed.length; j++) {
-            uint24 z = _cardfixed[j] >> 21 ;
+            uint24 z = _cardfixed[j] >> 21 ;  // we can also check the serialnumbers
             if (z == 1){
                 require(uint(_ogs[ogPos++])==j,"incorrect OG reference");
             } else if (z == 2) {
