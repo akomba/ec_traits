@@ -25,16 +25,16 @@ uint32[] traits;
 
 As defined in ec.py
 
-#### arrays of tokenIds
+#### arrays of pointers to the traits
 
 - ogs
 - alphas
 - ordinaries
 
-These arrays are initially all free. As an item is sold, it is removed by the usual array removal methods.
+These arrays are initially all free. As an item is sold, they are pushed to the tail.
 
 ``` text
-                          (these have been removed)
+                          (these have been sold)
        0  1  2  3  4  5    6  7  8  9
  ogs : Og Og Og Og Og Og | Og Og Og Og
  ```
