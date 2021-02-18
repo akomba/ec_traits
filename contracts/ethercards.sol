@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import "./interfaces/IRNG.sol";
+import "hardhat/console.sol";
 
 contract ethercards is ERC721 , Ownable{
 
@@ -78,7 +79,7 @@ contract ethercards is ERC721 , Ownable{
 
     event OG_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
     event ALPHA_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
-    event REGULAR_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
+    event RANDOM_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
 
     event Resolution(uint256 position,uint256 tokenId,uint256 chance);
 
@@ -90,8 +91,10 @@ contract ethercards is ERC721 , Ownable{
         bytes32 _traitHash, IRNG _rng, 
         uint256[] memory _og_stop, uint256[] memory _og_price,
         uint256[] memory _alpha_stop, uint256[] memory _alpha_price,
-        uint256[] memory _random_stop, uint256[] memory _random_price
+        uint256[] memory _random_stop, uint256[] memory _random_price,
+        uint256 _start, uint256 _end
         ) ERC721("Ether Cards Founder","ECF") {
+            console.log("constructor");
         traitHash = _traitHash;
         rng = _rng;
         og_stop = _og_stop;
@@ -100,7 +103,8 @@ contract ethercards is ERC721 , Ownable{
         alpha_price = _alpha_price;
         random_stop = _random_stop;
         random_price = _random_price;
-        
+        sale_start = _start;
+        sale_end = _end;
     }
 
     function request_random_if_needed() internal {
@@ -135,7 +139,7 @@ contract ethercards is ERC721 , Ownable{
         return (oPending + rPending +aPending > 3 || nextTokenId > rMax) && randomAvailable();
     }
 
-    function processRandom() internal {
+    function processRandom() external onlyOwner {
         require(needProcessing(),"Please wait for needProcessing flag");
         uint random = nextRandom();
         for (uint i = 0; i < 4; i++) {
@@ -153,6 +157,7 @@ contract ethercards is ERC721 , Ownable{
         if (card_type == 0) {
             require(msg.value >= OG_price(),"Price no longer valid");
             require (oStart + oSold + oPending <= oMax, "Sorry, no OG cards available");
+            emit OG_Ordered(msg.sender, msg.value,oStart+oSold+oPending,nextTokenId);
             serialToCard[oStart+oSold+oPending] = nextTokenId++;
             oPending++;
             og_pointer = bump(oSold,oPending,og_stop,og_pointer);
@@ -161,6 +166,7 @@ contract ethercards is ERC721 , Ownable{
         if (card_type == 1) {
             require(msg.value >= ALPHA_price(),"Price no longer valid");
             require (aStart + aSold + aPending <= aMax,"Sorry - no Alpha tickets available");
+            emit ALPHA_Ordered(msg.sender, msg.value,aStart+aSold+aPending,nextTokenId);
             serialToCard[aStart + aSold + aPending] = nextTokenId++;
             aPending++;
             alpha_pointer = bump(aSold , aPending , alpha_stop,alpha_pointer);
@@ -168,6 +174,8 @@ contract ethercards is ERC721 , Ownable{
         }
         require(msg.value >= RANDOM_price(),"Price no longer valid");
         require(rStart + rSold + rPending < rMax, "Sorry no random tickets available");
+        emit RANDOM_Ordered(msg.sender, msg.value,rStart+rSold+rPending,nextTokenId);
+
         serialToCard[rStart + rSold + rPending] = nextTokenId++;
         rPending++;
         random_pointer = bump(rSold , rPending , random_stop,random_pointer);
@@ -292,7 +300,7 @@ contract ethercards is ERC721 , Ownable{
     }
 
     function request_random() internal {
-        (randomRequests[lastRandomRequested++],) = rng.requestRandomNumber();
+        randomRequests[lastRandomRequested++] = rng.requestRandomNumber();
     }
 
     // View Function to get graphic properties

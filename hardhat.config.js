@@ -1,5 +1,6 @@
 require("@nomiclabs/hardhat-waffle");
 require("hardhat-deploy");
+const fs = require("fs")
 
 const INFURA_ID = 'e4d8f9fcacfd46ec872c77d66711e1aa';
 const OWNER_PRIVATE_KEY = '';
@@ -16,11 +17,13 @@ let mnemonic = ""
 let main_key = ""
 try {
   mnemonic = (fs.readFileSync("./mnemonic.txt")).toString().trim()
-} catch (e) { /* ignore for now because it might now have a mnemonic.txt file */ }
+} catch (e) { /* ignore for now because it might now have a mnemonic.txt file */ 
+  console.log(e)
+}
 // try{
 //  main_key = (fs.readFileSync("./mainnet.txt")).toString().trim()
 // }catch(e){ /* ignore for now because it might now have a mnemonic.txt file */ }
-
+console.log("menmonic:",mnemonic)
 /**
  * @type import('hardhat/config').HardhatUserConfig
  */
@@ -32,12 +35,16 @@ module.exports = {
       { version: "0.7.3", settings: {} }
     ],
   },
+  defaultNetwork: "hardhat",
   networks: {
     hardhat: {
+      accounts: {
+        mnemonic: mnemonic
+      },
     },
     localhost: {
       url: 'http://localhost:8545',
-      chainId: 1337
+      chainId: 31337
     },
     ganache: {
       url: 'http://localhost:7545',

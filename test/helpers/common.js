@@ -58,6 +58,15 @@ class Data {
     };
   }
 
+  async setEC(card,rng) {
+    this.card = card;
+    this.rng = rng;
+    this.addAccount(this.rng.address, "rng");
+    this.addContract(this.rng, "rng");
+    this.addAccount(this.card.address,"card");
+    this.addContract(this.card,"card");
+  }
+
   getShortAccountName(address) {
     if (address == ZERO_ADDRESS) {
       return "ETH|null:" + ZERO_ADDRESS.substring(0, 6);
@@ -170,6 +179,7 @@ class Data {
       var data = _contract.interface.parseLog(log);
       var result = _contract.name + "." + data.name + "(";
       let separator = "";
+      console.log(_contract.name, data.eventFragment)
       data.eventFragment.inputs.forEach((a) => {
         result = result + separator + a.name + ": ";
         if (a.type == 'address') {
@@ -225,9 +235,9 @@ class Data {
     var fee = receipt.gasUsed.mul(tx.gasPrice);
     var feeUsd = fee.mul(this.ethUsd).div(ethers.utils.parseUnits("1", 18));
     console.log("        " + message + " - gasUsed: " + receipt.gasUsed.toString() + ", fee: " + ethers.utils.formatUnits(fee, 18) + ", feeUsd: " + ethers.utils.formatUnits(feeUsd, 18) + ", @ " + ethers.utils.formatUnits(tx.gasPrice, 9) + " gwei & " + ethers.utils.formatUnits(this.ethUsd,18) + " ETH/USD, " + tx.hash);
-    receipt.logs.forEach((log) => {
-      this.printEvent(log);
-    });
+    // receipt.logs.forEach((log) => {
+    //   this.printEvent(log);
+    // });
   }
 
   async printBalances() {
