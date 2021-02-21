@@ -5,31 +5,32 @@ pragma solidity ^0.7.0;
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/Math.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./interfaces/IRNG.sol";
 import "hardhat/console.sol";
 
-contract ethercards is ERC721 , Ownable{
+contract ethercards is ERC721 , Ownable, Pausable{
 
     IRNG rng;
 
-    enum CardType { OG, Alpha, Regular } 
+    enum CardType { OG, Alpha, Common, Founder } 
     enum FrameType { Common, Silver, Gold, Epic } 
 
 
     uint256   constant oStart = 10;
     uint256   constant aStart = 100;
-    uint256   constant rStart = 1000;
+    uint256   constant cStart = 1000;
     uint256   constant oMax = 99;
     uint256   constant aMax = 999;
-    uint256   constant rMax = 9999;
+    uint256   constant cMax = 9999;
 
     uint256   constant tr_ass_order_length = 14;
     uint256   constant tr_ass_order_mask   = 0x3ff;
     uint256   constant card_trait_mask     = 0x0ff;
 
     // sale conditions
-    uint256  sale_start;
-    uint256  sale_end;
+    uint256   sale_start;
+    uint256   sale_end;
 
 
     // sold AND resolved
@@ -48,26 +49,26 @@ contract ethercards is ERC721 , Ownable{
     uint256                     public randomOneOfFour;
 
     // pricing stuff
-    uint256[]                      og_stop;
-    uint256[]                      og_price;
-    uint256[]                      alpha_stop;
-    uint256[]                      alpha_price;
-    uint256[]                      random_stop;
-    uint256[]                      random_price;
-    uint256                        og_pointer;
-    uint256                        alpha_pointer;
-    uint256                        random_pointer;
+    uint256[]                   og_stop;
+    uint256[]                   og_price;
+    uint256[]                   alpha_stop;
+    uint256[]                   alpha_price;
+    uint256[]                   random_stop;
+    uint256[]                   random_price;
+    uint256                     og_pointer;
+    uint256                     alpha_pointer;
+    uint256                     random_pointer;
 
-    address payable                wallet;
+    address payable             wallet;
 
 
     // traits stuff
     bytes32                        traitHash;
     mapping (uint256 => uint256)   traitAssignmentOrder;
     // Validation
-    uint256 startPos;
-    bool finalised;
-    bytes32                         tokenIdHash;
+    uint256                     startPos;
+    bool public                 finalised;
+    bytes32                     tokenIdHash;
 
 
     mapping(uint256 => uint256) serialToCard;
@@ -118,30 +119,42 @@ contract ethercards is ERC721 , Ownable{
         }
     }
 
+    function OG_remaining() public view returns (uint256) {
+        return oMax - (oStart + oSold + oPending)+1;
+    }
+
+    function ALPHA_remaining() public view returns (uint256) {
+        return aMax - (aStart + aSold + aPending)+1;
+    }
+
+    function RANDOM_remaining() public view returns (uint256) {
+        return cMax - (cStart + rSold + rPending)+1;
+    }
+
     function OG_price() public view returns (uint256) {
-        require(oSold + oPending <= oMax,"OG Cards sold out"); 
+        require(OG_remaining() > 0,"OG Cards sold out"); 
         return og_price[og_pointer];
     }
 
-    function ALPHA_price() internal returns (uint256) {
-        require(aSold + aPending <= aMax,"Alpha Cards sold out"); 
+    function ALPHA_price() public view returns (uint256) {
+        require(ALPHA_remaining() > 0,"Alpha Cards sold out"); 
         return alpha_price[alpha_pointer];        
     }
 
-    function RANDOM_price() internal returns (uint256) {
-        require(rSold + rPending <= rMax,"Random Cards sold out"); 
+    function RANDOM_price() public view returns (uint256) {
+        require(RANDOM_remaining() > 0,"Random Cards sold out"); 
         return random_price[random_pointer];
     }
 
     modifier sale_active() {
         require(block.timestamp >= sale_start,"Tickets are not available yet");
         require(block.timestamp < sale_end,"Tickets are no longer available");
-        require(nextTokenId <= rMax, "Sorry. Sold out");
+        require(nextTokenId <= cMax, "Sorry. Sold out");
         _;
     }
 
     function needProcessing() public view returns (bool) {
-        return (oPending + rPending +aPending > 3 || nextTokenId > rMax) && randomAvailable();
+        return (oPending + rPending +aPending > 3 || nextTokenId > cMax) && randomAvailable();
     }
 
     function processRandom() external onlyOwner {
@@ -156,14 +169,29 @@ contract ethercards is ERC721 , Ownable{
         }
     }
  
-    function buyCard(uint card_type) external payable sale_active {
-        console.log("BUYING");
-        _mint(msg.sender,nextTokenId);
+    function buyCard(uint card_type) external payable sale_active whenNotPaused {
         wallet.transfer(msg.value);
-        request_random_if_needed();
         if (card_type == 0) {
             require(msg.value >= OG_price(),"Price no longer valid");
-            require (oStart + oSold + oPending <= oMax, "Sorry, no OG cards available");
+            return;
+        }
+        if (card_type == 1) {
+            require(msg.value >= ALPHA_price(),"Price no longer valid");
+            return;
+        }
+        require(msg.value >= RANDOM_price(),"Price no longer valid");
+        assignCard(msg.sender,card_type);
+    }
+
+    function allocateCard(address buyer, uint256 card_type) external onlyOwner {
+        assignCard(buyer,card_type);
+    }
+
+    function assignCard(address buyer, uint256 card_type) internal {
+        _mint(buyer,nextTokenId);
+        request_random_if_needed();
+        if (card_type == 0) {
+            require (OG_remaining() > 0, "Sorry, no OG cards available");
             emit OG_Ordered(msg.sender, msg.value,oStart+oSold+oPending,nextTokenId);
             serialToCard[oStart+oSold+oPending] = nextTokenId++;
             oPending++;
@@ -171,20 +199,16 @@ contract ethercards is ERC721 , Ownable{
             return;
         }
         if (card_type == 1) {
-            require(msg.value >= ALPHA_price(),"Price no longer valid");
-            require (oStart + oSold + oPending > oMax, "Sorry, Alpha cards not available until OG cards all sold");
-            require (aStart + aSold + aPending <= aMax,"Sorry - no Alpha tickets available");
+            require (ALPHA_remaining() > 0,"Sorry - no Alpha tickets available");
             emit ALPHA_Ordered(msg.sender, msg.value,aStart+aSold+aPending,nextTokenId);
             serialToCard[aStart + aSold + aPending] = nextTokenId++;
             aPending++;
             alpha_pointer = bump(aSold , aPending , alpha_stop,alpha_pointer);
             return;
         }
-        require(msg.value >= RANDOM_price(),"Price no longer valid");
-        require(rStart + rSold + rPending < rMax, "Sorry no random tickets available");
-        emit RANDOM_Ordered(msg.sender, msg.value,rStart+rSold+rPending,nextTokenId);
-
-        serialToCard[rStart + rSold + rPending] = nextTokenId++;
+        require(RANDOM_remaining() > 0, "Sorry no random tickets available");
+        emit RANDOM_Ordered(msg.sender, msg.value,cStart+rSold+rPending,nextTokenId);
+        serialToCard[cStart + rSold + rPending] = nextTokenId++;
         rPending++;
         random_pointer = bump(rSold , rPending , random_stop,random_pointer);
     }
@@ -203,9 +227,9 @@ contract ethercards is ERC721 , Ownable{
             pos = aStart + aSold++;
             aPending--;
         } else if (rPending > 0) {
-            uint tID = serialToCard[rStart+rSold];
+            uint tID = serialToCard[cStart+rSold];
             // draw for what kind of card it is
-            uint256 remainingTickets = oMax - oSold + aMax - aSold + rMax - rSold + 3;
+            uint256 remainingTickets = oMax - oSold + aMax - aSold + cMax - rSold + 3;
             pos = r % remainingTickets;
             r = r / remainingTickets;
             if (pos <= (oMax - oSold)) {
@@ -218,12 +242,12 @@ contract ethercards is ERC721 , Ownable{
                 alpha_pointer = bump(aSold , aPending , alpha_stop,alpha_pointer);
             } else {
                 chances = 0;
-                pos = rStart + rSold++;
+                pos = cStart + rSold++;
             }
             if (chances != 0) {
                 // the Random[x] is now no longer a random card
                 serialToCard[pos] = tID; // move the tokenId
-                serialToCard[rStart+rSold] = serialToCard[rStart+rSold+rPending]; // bring last in to fill gap
+                serialToCard[cStart+rSold] = serialToCard[cStart+rSold+rPending]; // bring last in to fill gap
             }
             rPending--;
         }   
@@ -251,16 +275,27 @@ contract ethercards is ERC721 , Ownable{
         return pointer;
     }
     
+
+    //
+    // This is used if (heaven forbid) the verification fails
+    //
     function ResetStartPos() external onlyOwner {
         require(!finalised,"This Data is already finalised");
         startPos = 0;
     }
 
-
+    // tokenIds : tokenIds from 10 to 9999
+    // traits   : the traits to be assigned to the cards in an order where
+    //            card{j}.trait_assignment_order < card{j+1}.trait_assignment_order 
+    // or
+    //            card{j}.trait_assignment_order == card{j+1}.trait_assignment_order amd serNo[j] < serNo[j+1]
+    //            AND card{j}.trait_assignment_order < card{j+1}.trait_assignment_order 
+ 
     function FinaliseTokenOrder(uint16[] memory tokenIds, uint16[] memory traits, uint256 _numberToProcess) public onlyOwner {
         require (keccak256(abi.encodePacked(traits)) == traitHash,"invalid Traits Hash");
         bytes32 idHash = keccak256(abi.encodePacked(tokenIds));
         if (startPos == 0) {
+            startPos = 10;
             tokenIdHash = idHash;
         } else {
             require(tokenIdHash == idHash, "tokenHashes do not match");
@@ -268,14 +303,14 @@ contract ethercards is ERC721 , Ownable{
         require(!finalised,"This Data is already finalised");
         uint256 numberToProcess = Math.min(tokenIds.length, _numberToProcess);
         uint start = startPos;
-        uint end   = Math.min(startPos + numberToProcess,rMax+1);
+        uint end   = Math.min(startPos + numberToProcess,cMax+1);
         for (uint256 i = start; i < numberToProcess; i++) {
             if (i > 0) {
                 require(validate(i,tokenIds[i]),"tokenIds in wrong order");
             }
             specialTraits[tokenIds[i]] = traits[i];
         }
-        if (end == rMax+1) {
+        if (end == cMax+1) {
             finalised = true;
             emit FinalisationComplete();
         } else {
@@ -286,8 +321,8 @@ contract ethercards is ERC721 , Ownable{
 
     function validate(uint prevTokenId, uint tokenId) internal view returns (bool) {
         require(
-            (traitAssignmentOrder[prevTokenId] < traitAssignmentOrder[prevTokenId]) ||
-            ((traitAssignmentOrder[prevTokenId] == traitAssignmentOrder[prevTokenId]) && (tokenIdToSerial[prevTokenId] < tokenIdToSerial[tokenId])),
+            (traitAssignmentOrder[prevTokenId] < traitAssignmentOrder[tokenId]) ||
+            ((traitAssignmentOrder[prevTokenId] == traitAssignmentOrder[tokenId]) && (tokenIdToSerial[prevTokenId] < tokenIdToSerial[tokenId])),
             "Traits in incorrect order");
     }
 
@@ -330,7 +365,11 @@ contract ethercards is ERC721 , Ownable{
     }
 
     function cardtype(uint tokenId) public view returns(CardType) {
-//        return CardType((cardTrait(tokenId) >> 21) & 3);
+        uint256 serial = tokenIdToSerial[tokenId];
+        if (serial < oStart) return CardType.Founder;
+        if (serial < aStart) return CardType.OG;
+        if (serial < cStart) return CardType.Alpha;
+        return CardType.Common;
     }
 
     function frameType(uint tokenId) public view returns(FrameType) {
