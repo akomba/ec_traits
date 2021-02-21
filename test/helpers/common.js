@@ -63,8 +63,8 @@ class Data {
     this.rng = rng;
     this.addAccount(this.rng.address, "rng");
     this.addContract(this.rng, "rng");
-    this.addAccount(this.card.address,"card");
-    this.addContract(this.card,"card");
+    this.addAccount(this.card.address,"ethercard");
+    this.addContract(this.card,"ethercard");
   }
 
   getShortAccountName(address) {
@@ -179,27 +179,29 @@ class Data {
       var data = _contract.interface.parseLog(log);
       var result = _contract.name + "." + data.name + "(";
       let separator = "";
-      console.log(_contract.name, data.eventFragment)
-      data.eventFragment.inputs.forEach((a) => {
-        result = result + separator + a.name + ": ";
-        if (a.type == 'address') {
-          result = result + this.getShortAccountName(data.args[a.name].toString());
-        } else if (a.type == 'uint256') {
-          if (a.name == 'tokens' || a.name == 'amount' || a.name == 'balance' || a.name == 'votes' || a.name == 'reward' || a.name == 'totalVotes' || a.name == 'forVotes' || a.name == 'againstVotes' || a.name == 'tokensBurnt' || a.name == 'tokensWithSlashingFactor' || a.name == 'rewardWithSlashingFactor' || a.name == 'cap') {
-            // TODO Get decimals from token contracts, and only convert for token contract values
-            result = result + ethers.utils.formatUnits(data.args[a.name], 18);
-          } else if (a.name == 'slashingFactor' || a.name == 'rate') {
-            result = result + ethers.utils.formatUnits(data.args[a.name], 16) + "%";
-          } else if (a.name == 'term') {
-            result = result + this.termString(data.args[a.name].toString());
+      console.log(_contract.name, data.name)
+      if (false) {
+        data.eventFragment.inputs.forEach((a) => {
+          result = result + separator + a.name + ": ";
+          if (a.type == 'address') {
+            result = result + this.getShortAccountName(data.args[a.name].toString());
+          } else if (a.type == 'uint256') {
+            if (a.name == 'tokens' || a.name == 'amount' || a.name == 'balance' || a.name == 'votes' || a.name == 'reward' || a.name == 'totalVotes' || a.name == 'forVotes' || a.name == 'againstVotes' || a.name == 'tokensBurnt' || a.name == 'tokensWithSlashingFactor' || a.name == 'rewardWithSlashingFactor' || a.name == 'cap') {
+              // TODO Get decimals from token contracts, and only convert for token contract values
+              result = result + ethers.utils.formatUnits(data.args[a.name], 18);
+            } else if (a.name == 'slashingFactor' || a.name == 'rate') {
+              result = result + ethers.utils.formatUnits(data.args[a.name], 16) + "%";
+            } else if (a.name == 'term') {
+              result = result + this.termString(data.args[a.name].toString());
+            } else {
+              result = result + data.args[a.name].toString();
+            }
           } else {
             result = result + data.args[a.name].toString();
           }
-        } else {
-          result = result + data.args[a.name].toString();
-        }
-        separator = ", ";
-      });
+          separator = ", ";
+        });
+      }
       result = result + ")";
       console.log("        + " + result);
     } else {
@@ -235,9 +237,9 @@ class Data {
     var fee = receipt.gasUsed.mul(tx.gasPrice);
     var feeUsd = fee.mul(this.ethUsd).div(ethers.utils.parseUnits("1", 18));
     console.log("        " + message + " - gasUsed: " + receipt.gasUsed.toString() + ", fee: " + ethers.utils.formatUnits(fee, 18) + ", feeUsd: " + ethers.utils.formatUnits(feeUsd, 18) + ", @ " + ethers.utils.formatUnits(tx.gasPrice, 9) + " gwei & " + ethers.utils.formatUnits(this.ethUsd,18) + " ETH/USD, " + tx.hash);
-    // receipt.logs.forEach((log) => {
-    //   this.printEvent(log);
-    // });
+    receipt.logs.forEach((log) => {
+      this.printEvent(log);
+    });
   }
 
   async printBalances() {

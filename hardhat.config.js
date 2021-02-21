@@ -2,7 +2,7 @@ require("@nomiclabs/hardhat-waffle");
 require("hardhat-deploy");
 const fs = require("fs")
 
-const INFURA_ID = 'e4d8f9fcacfd46ec872c77d66711e1aa';
+const INFURA_ID = '';
 const OWNER_PRIVATE_KEY = '';
 
 task("accounts", "Prints the list of accounts", async () => {
@@ -38,9 +38,7 @@ module.exports = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
-      accounts: {
-        mnemonic: mnemonic
-      },
+     
     },
     localhost: {
       url: 'http://localhost:8545',

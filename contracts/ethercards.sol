@@ -37,15 +37,15 @@ contract ethercards is ERC721 , Ownable{
     uint256   aSold;
     uint256   rSold;
     // pending resolution
-    uint256   oPending;
-    uint256   aPending;
-    uint256   rPending;
-    uint256   nextTokenId;
+    uint256   public oPending;
+    uint256   public aPending;
+    uint256   public rPending;
+    uint256   public nextTokenId = 10;
     // Random Stuff
-    mapping (uint256 => uint32) randomRequests;
-    uint256                     lastRandomRequested;
-    uint256                     lastRandomProcessed;
-    uint256                     randomOneOfFour;
+    mapping (uint256 => uint32) public randomRequests;
+    uint256                     public lastRandomRequested;
+    uint256                     public lastRandomProcessed;
+    uint256                     public randomOneOfFour;
 
     // pricing stuff
     uint256[]                      og_stop;
@@ -57,6 +57,8 @@ contract ethercards is ERC721 , Ownable{
     uint256                        og_pointer;
     uint256                        alpha_pointer;
     uint256                        random_pointer;
+
+    address payable                wallet;
 
 
     // traits stuff
@@ -81,7 +83,8 @@ contract ethercards is ERC721 , Ownable{
     event ALPHA_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
     event RANDOM_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
 
-    event Resolution(uint256 position,uint256 tokenId,uint256 chance);
+    event Resolution(uint256 position,uint256 tokenId,uint256 chance, uint256 cardTrait);
+    event Chance(uint256 chance);
 
     event FinalisingUpTo(uint256 position ,uint256 traits_length);
     event FinalisationComplete();
@@ -92,7 +95,8 @@ contract ethercards is ERC721 , Ownable{
         uint256[] memory _og_stop, uint256[] memory _og_price,
         uint256[] memory _alpha_stop, uint256[] memory _alpha_price,
         uint256[] memory _random_stop, uint256[] memory _random_price,
-        uint256 _start, uint256 _end
+        uint256 _start, uint256 _end,
+        address payable _wallet
         ) ERC721("Ether Cards Founder","ECF") {
             console.log("constructor");
         traitHash = _traitHash;
@@ -105,6 +109,7 @@ contract ethercards is ERC721 , Ownable{
         random_price = _random_price;
         sale_start = _start;
         sale_end = _end;
+        wallet = _wallet;
     }
 
     function request_random_if_needed() internal {
@@ -152,7 +157,9 @@ contract ethercards is ERC721 , Ownable{
     }
  
     function buyCard(uint card_type) external payable sale_active {
+        console.log("BUYING");
         _mint(msg.sender,nextTokenId);
+        wallet.transfer(msg.value);
         request_random_if_needed();
         if (card_type == 0) {
             require(msg.value >= OG_price(),"Price no longer valid");
@@ -165,6 +172,7 @@ contract ethercards is ERC721 , Ownable{
         }
         if (card_type == 1) {
             require(msg.value >= ALPHA_price(),"Price no longer valid");
+            require (oStart + oSold + oPending > oMax, "Sorry, Alpha cards not available until OG cards all sold");
             require (aStart + aSold + aPending <= aMax,"Sorry - no Alpha tickets available");
             emit ALPHA_Ordered(msg.sender, msg.value,aStart+aSold+aPending,nextTokenId);
             serialToCard[aStart + aSold + aPending] = nextTokenId++;
@@ -187,11 +195,11 @@ contract ethercards is ERC721 , Ownable{
         uint256 pos;
         uint256 r = random;
         if (oPending > 0) {
-            chances = 3;
+            chances = 2;
             pos = oStart+oSold++;
             oPending--;
         } else if (aPending > 0) {
-            chances = 2;
+            chances = 1;
             pos = aStart + aSold++;
             aPending--;
         } else if (rPending > 0) {
@@ -209,6 +217,7 @@ contract ethercards is ERC721 , Ownable{
                 pos = aStart + aSold++;
                 alpha_pointer = bump(aSold , aPending , alpha_stop,alpha_pointer);
             } else {
+                chances = 0;
                 pos = rStart + rSold++;
             }
             if (chances != 0) {
@@ -219,9 +228,11 @@ contract ethercards is ERC721 , Ownable{
             rPending--;
         }   
         uint256 chance = r & tr_ass_order_mask;
+        emit Chance(chance);
         r = r >> tr_ass_order_length;
         for (uint j = 0; j < chances; j++) {
             chance2 = r & tr_ass_order_mask;
+            emit Chance(chance2);    
             r = r >> tr_ass_order_length;
             chance = Math.min(chance,chance2);
         }
@@ -229,7 +240,7 @@ contract ethercards is ERC721 , Ownable{
         tokenIdToSerial[tokenId] = pos; 
         cardTraits[tokenId] = r & card_trait_mask;
         traitAssignmentOrder[tokenId] = chance;
-        emit Resolution(pos,tokenId,chance);
+        emit Resolution(pos,tokenId,chance,r & card_trait_mask);
     }
 
     function bump(uint sold, uint pending, uint[] memory stop, uint pointer) internal pure returns (uint256) {
@@ -310,8 +321,12 @@ contract ethercards is ERC721 , Ownable{
         return traitIndex[tokenId];
     }
 
-    function cardTrait(uint256 tokenId) internal view returns (uint24) {
-//        return cardTraits[traitPos(tokenId)];
+    function cardTrait(uint256 tokenId) public view returns (uint256) {
+        return cardTraits[tokenId];
+    }
+
+    function specialTrait(uint256 tokenId) public view returns (uint256) {
+        return specialTraits[traitPos(tokenId)];
     }
 
     function cardtype(uint tokenId) public view returns(CardType) {
