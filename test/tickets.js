@@ -303,17 +303,12 @@ describe("Ether Cards contract", function () {
         t2 = await token.tokenOfOwnerByIndex(addr2.address,0)
         t3 = await token.tokenOfOwnerByIndex(addr3.address,0)
         t4 = await token.tokenOfOwnerByIndex(addr4.address,0)
-        c1 = await token.cardTrait(t1)
-        c2 = await token.cardTrait(t2)
-        c3 = await token.cardTrait(t3)
-        c4 = await token.cardTrait(t4)
-        s1 = await token.specialTrait(t1)
-        s2 = await token.specialTrait(t2)
-        s3 = await token.specialTrait(t3)
-        s4 = await token.specialTrait(t4)
+        c1 = await token.cardType(t1)
+        c2 = await token.cardType(t2)
+        c3 = await token.cardType(t3)
+        c4 = await token.cardType(t4)
         console.log("tokenIds",t1,t2,t3,t4)
         console.log("cards ",c1,c2,c3,c4)
-        console.log("special ",s1,s2,s3,s4)
     })
 
     it ("Mixed Bag", async () => {
@@ -361,12 +356,13 @@ describe("Ether Cards contract", function () {
     });
 
     it("processRandom2", async() => {
-        np = await token.needProcessing();
-        expect(np).to.equal(true)
-        tx = await token.connect(oracleSigner).processRandom();
-        await data.printTxData("processRandom2",tx)
-        receipt = await tx.wait()
-        printEvents(receipt)
+        while  (await token.needProcessing()){
+       
+            tx = await token.connect(oracleSigner).processRandom();
+            await data.printTxData("processRandom2",tx)
+            receipt = await tx.wait()
+            printEvents(receipt)
+        }
         // console.log("->",receipt.logs.length)
         // for (j = 0; j < receipt.logs.length; j++){
         //     console.log("log ",j, "->",lookup(receipt.logs[j].topics[0]),receipt.logs[j].data)
@@ -379,16 +375,58 @@ describe("Ether Cards contract", function () {
         a22 = await token.tokenOfOwnerByIndex(addr2.address,1)
         a23 = await token.tokenOfOwnerByIndex(addr3.address,1)
         a24 = await token.tokenOfOwnerByIndex(addr4.address,1)
-        console.log("a11",a11,10)
-        console.log("a12",a12,11)
-        console.log("a13",a13,12)
-        console.log("a14",a14,13)
-        console.log("a21",a21,14)
-        console.log("a22",a22,15)
-        console.log("a23",a23,16)
-        console.log("a24",a24,17)
 
-    })
+        if (await token.isCardResolved(a11)) {
+            s11 = await token.cardSerialNumber(a11)
+        } else {
+            s11 = -1
+        }
+        if (await token.isCardResolved(a12)) {
+            s12 = await token.cardSerialNumber(a12)
+        } else {
+            s12 = -1
+        }
+        if (await token.isCardResolved(a13)) {
+            s13 = await token.cardSerialNumber(a13)
+        } else {
+            s13 = -1
+        }
+        if (await token.isCardResolved(a14)) {
+            s14 = await token.cardSerialNumber(a14)
+        } else {
+            s14 = -1
+        }
+        if (await token.isCardResolved(a21)) {
+            s21 = await token.cardSerialNumber(a21)
+        } else {
+            s21 = -1
+        }
+        if (await token.isCardResolved(a22)) {
+            s22 = await token.cardSerialNumber(a22)
+        } else {
+            s22 = -1
+        }
+        if (await token.isCardResolved(a23)) {
+            s23 = await token.cardSerialNumber(a23)
+        } else {
+            s23 = -1
+        }
+        if (await token.isCardResolved(a24)) {
+            s24 = await token.cardSerialNumber(a24)
+        } else {
+            s24 = -1
+        }
+        console.log("tokenId & serial number")
+        console.log("a11",ethers.utils.formatUnits(a11,"wei"),ethers.utils.formatUnits(s11,"wei"),10)
+        console.log("a12",ethers.utils.formatUnits(a12,"wei"),ethers.utils.formatUnits(s12,"wei"),11)
+        console.log("a13",ethers.utils.formatUnits(a13,"wei"),ethers.utils.formatUnits(s13,"wei"),12)
+        console.log("a14",ethers.utils.formatUnits(a14,"wei"),ethers.utils.formatUnits(s14,"wei"),13)
+        console.log("a21",ethers.utils.formatUnits(a21,"wei"),ethers.utils.formatUnits(s21,"wei"),14)
+        console.log("a22",ethers.utils.formatUnits(a22,"wei"),ethers.utils.formatUnits(s22,"wei"),15)
+        console.log("a23",ethers.utils.formatUnits(a23,"wei"),ethers.utils.formatUnits(s23,"wei"),16)
+        console.log("a24",ethers.utils.formatUnits(a24,"wei"),ethers.utils.formatUnits(s24,"wei"),17)
+
+   })
 
     it("Balances Now", async ()=> {
         bo = await provider.getBalance(owner.address)

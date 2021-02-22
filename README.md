@@ -1,4 +1,22 @@
-# Tests and calculations for the ether.cards traits system
+##
+
+To finish
+
+1) Generic func to add new traits to any card by tokenID (array)
+2) Founders Tokens fixed entry -= DONE
+3) Presale - buy without cash -+ DONE
+4) bonding curves - can be done before release - DONE
+5) URI @ finalization
+Make sure all require traits / info is visible
+
+Andras : Generate 10,000 tokens (Final)
+How many bits for CARD / COMMON
+Test that they get allocated properly
+
+Check out card trait & random trait allocations
+
+
+## Tests and calculations for the ether.cards traits system
 
 
 ## types of features:

@@ -13,7 +13,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     IRNG rng;
 
-    enum CardType { OG, Alpha, Common, Founder } 
+    enum CardType { OG, Alpha, Common, Founder, Unresolved } 
     enum FrameType { Common, Silver, Gold, Epic } 
 
 
@@ -26,7 +26,18 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     uint256   constant tr_ass_order_length = 14;
     uint256   constant tr_ass_order_mask   = 0x3ff;
-    uint256   constant card_trait_mask     = 0x0ff;
+
+    uint256   constant picture_trait_mask     = 0x0ff;
+    uint256   constant picture_trait_offset   = 0;
+    uint256   constant frame_trait_mask     = 0x0ff;
+    uint256   constant frame_trait_offset   = picture_trait_offset + 8;
+    uint256   constant feature_trait_mask     = 0x0ff;
+    uint256   constant feature_trait_offset   = frame_trait_offset + 8;
+    uint256   constant faketoshi_trait_mask     = 0x01;
+    uint256   constant faketoshi_trait_offset   = feature_trait_offset + 8;
+    uint256   constant extra_trait_offset       =  128;//faketoshi_trait_offset + 1;
+
+
 
     // sale conditions
     uint256   sale_start;
@@ -74,8 +85,8 @@ contract ethercards is ERC721 , Ownable, Pausable{
     mapping(uint256 => uint256) serialToTokenId;
     mapping(uint256 => uint256) tokenIdToSerial;
 
-    mapping(uint256 => uint256) specialTraits;
     mapping(uint256 => uint256) cardTraits;
+
 
     bool    presale_closed;
     bool    founders_done;
@@ -86,7 +97,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     event ALPHA_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
     event RANDOM_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
 
-    event Resolution(uint256 position,uint256 tokenId,uint256 chance, uint256 cardTrait);
+    event Resolution(uint256 position,uint256 tokenId,uint256 chance);
     event Chance(uint256 chance);
 
     event FinalisingUpTo(uint256 position ,uint256 traits_length);
@@ -142,14 +153,15 @@ contract ethercards is ERC721 , Ownable, Pausable{
     // ENTRY POINT TO SALE CONTRACT
 
     function buyCard(uint card_type) external payable sale_active whenNotPaused {
+        string memory pnv = "Price no longer valid";
         wallet.transfer(msg.value);
         require(card_type < 3, "Invalid card type");
         if (card_type == 0) {
-            require(msg.value >= OG_price(),"Price no longer valid");
+            require(msg.value >= OG_price(),pnv);
         } else if (card_type == 1) {
-            require(msg.value >= ALPHA_price(),"Price no longer valid");
+            require(msg.value >= ALPHA_price(),pnv);
         } else if (card_type == 0){
-            require(msg.value >= RANDOM_price(),"Price no longer valid");
+            require(msg.value >= RANDOM_price(),pnv);
         }  
         assignCard(msg.sender,card_type);
     }
@@ -179,8 +191,17 @@ contract ethercards is ERC721 , Ownable, Pausable{
         for (uint j = 0; j < 10; j++) {
             _mint(founders[j],j);
             tokenIdToSerial[j] = j;
+            serialToTokenId[j] = j;
+            traitAssignmentOrder[j] = 1;
         }
         founders_done = true;
+    }
+
+    // Extra Traits
+
+    function setExtraTraits(uint256 tokenId, uint256 bitNumber) public onlyOwner {
+        require((bitNumber >= extra_trait_offset) && (bitNumber < 256), "illegal bit number");
+        cardTraits[tokenId] |=   (1 << bitNumber);
     }
 
     // ORACLE ACTIVATION
@@ -190,7 +211,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     }
 
     function processRandom() external onlyOracle {
-        require(needProcessing(),"Please wait for needProcessing flag");
+        require(needProcessing(),"not ready");
         uint random = nextRandom();
         for (uint i = 0; i < 4; i++) {
             if (oPending + rPending +aPending == 0) {
@@ -237,8 +258,8 @@ contract ethercards is ERC721 , Ownable, Pausable{
     }
 
     modifier sale_active() {
-        require(block.timestamp >= sale_start,"Tickets are not available yet");
-        require(block.timestamp < sale_end,"Tickets are no longer available");
+        require(block.timestamp >= sale_start,"Sale not started");
+        require(block.timestamp < sale_end,"Sale ended");
         require(nextTokenId <= cMax, "Sorry. Sold out");
         _;
     }
@@ -326,9 +347,8 @@ contract ethercards is ERC721 , Ownable, Pausable{
         }
         uint256 tokenId = serialToTokenId[pos];
         tokenIdToSerial[tokenId] = pos; 
-        cardTraits[tokenId] = r & card_trait_mask;
-        traitAssignmentOrder[tokenId] = chance;
-        emit Resolution(pos,tokenId,chance,r & card_trait_mask);
+        traitAssignmentOrder[tokenId] = chance+1;
+        emit Resolution(pos,tokenId,chance);
     }
 
     function bump(uint sold, uint pending, uint[] memory stop, uint pointer) internal pure returns (uint256) {
@@ -372,7 +392,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
             if (i > 0) {
                 require(validate(i,tokenIds[i]),"tokenIds in wrong order");
             }
-            specialTraits[tokenIds[i]] = traits[i];
+            cardTraits[tokenIds[i]] = traits[i];
         }
         if (end == cMax+1) {
             finalised = true;
@@ -391,14 +411,6 @@ contract ethercards is ERC721 , Ownable, Pausable{
     }
 
         
-    // function loadTraits(uint32[] memory _traits) external {      
-    //     bytes32 hash = keccak256(abi.encodePacked(_traits));
-    //     require(traitHash == hash,"traits not valid");
-    //     // require(_traits.length == oMax + 1,"number of traits does not match number of cards");
-    //     // functional = _traits;
-    // }
-
-    // Random number stuff
 
     function randomAvailable() internal view returns (bool) {
         return (lastRandomRequested > lastRandomProcessed) && rng.isRequestComplete(randomRequests[lastRandomProcessed]);
@@ -415,20 +427,22 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     // View Function to get graphic properties
 
+    function isCardResolved(uint256 tokenId) public view returns (bool) {
+        return traitAssignmentOrder[tokenId] > 0;
+    }
+
     function cardSerialNumber(uint tokenId) public view returns (uint256) {
         require(tokenId < nextTokenId,"invalid tokenId");
+        require(isCardResolved(tokenId),"Card not resolved yet");
         return tokenIdToSerial[tokenId];
     }
 
-    function cardTrait(uint256 tokenId) public view returns (uint256) {
+    function fullTrait(uint256 tokenId) public view returns (uint256) {
         return cardTraits[tokenId];
     }
 
-    function specialTrait(uint256 tokenId) public view returns (uint256) {
-        return specialTraits[tokenId];
-    }
-
-    function cardtype(uint tokenId) public view returns(CardType) {
+    function cardType(uint tokenId) public view returns(CardType) {
+        if (!isCardResolved(tokenId)) return CardType.Unresolved;
         uint256 serial = tokenIdToSerial[tokenId];
         if (serial < oStart) return CardType.Founder;
         if (serial < aStart) return CardType.OG;
@@ -436,13 +450,26 @@ contract ethercards is ERC721 , Ownable, Pausable{
         return CardType.Common;
     }
 
-    function frameType(uint tokenId) public view returns(FrameType) {
-//        return FrameType((cardTrait(tokenId) >> 14) & 3);
+    function frameTrait(uint tokenId) public view returns(uint256) {
+        return (fullTrait(tokenId) >> frame_trait_offset) & frame_trait_offset;
     }
 
  
-    function pictureID(uint tokenId) public view returns(uint24) {
-//        return (cardTrait(tokenId) >> 16) & 0x1f;
+    function pictureTrait(uint tokenId) public view returns(uint256) {
+        return (fullTrait(tokenId) >> picture_trait_offset) & picture_trait_offset;
     }
+
+    function featureTrait(uint tokenId) public view returns(uint256) {
+        return (fullTrait(tokenId) >> feature_trait_offset) & feature_trait_offset;
+    }
+
+    function faketoshiTrait(uint256 tokenId) public view returns (uint256) {
+        return (fullTrait(tokenId) >> faketoshi_trait_offset) & faketoshi_trait_offset;
+    }
+
+    function extraTrait(uint256 tokenId) public view returns (uint256) {
+        return (fullTrait(tokenId) >> extra_trait_offset);
+    }
+   
  
 }
