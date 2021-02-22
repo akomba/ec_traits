@@ -27,6 +27,7 @@ describe("Ether Cards contract", function () {
     let  lastNext = 0;
 
     let oracle;
+    let oracleSigner;
 
     before(async function () {
     
@@ -40,6 +41,7 @@ describe("Ether Cards contract", function () {
         addr4 = data.user4Signer;
 
         oracle = data.user8;
+        oracleSigner = data.user8Signer;
 
         console.log(oracle)
 
@@ -86,6 +88,11 @@ describe("Ether Cards contract", function () {
         addLookup(Token.interface.events["Chance"])
         addLookup(Token.interface.events["Resolution"])
         addLookup(Token.interface.events["Transfer"])
+        addLookup(Token.interface.events["OG_Ordered"])
+        addLookup(Token.interface.events["ALPHA_Ordered"])
+        addLookup(Token.interface.events["RANDOM_Ordered"])
+        addLookup(Random.interface.events["Request"])
+        addLookup(Random.interface.events["RandomReceived"])
         // for (j = 0; j < Token.interface.events.length; j++){
         //     console.log("events",Token.interface.events[j]);//,Token.interface.events.topic)
         // }
@@ -143,12 +150,21 @@ describe("Ether Cards contract", function () {
             "0x627fd152d3F7c420341FC08085e114769d03BCbb"
         ]
 
+        console.log("OG")
         tx = await token.allocateManyCards(psOG,0);
         await data.printTxData("OGS",tx)
-        token.allocateManyCards(psAlpha,1);
+        receipt = await tx.wait()
+        printEvents(receipt)
+        console.log("ALPHA")
+        tx = await token.allocateManyCards(psAlpha,1);
         await data.printTxData("Alphas",tx)
-        token.allocateManyCards(psCommon,2);
+        receipt = await tx.wait()
+        printEvents(receipt)
+        console.log("COMMON")
+        tx = await token.allocateManyCards(psCommon,2);
         await data.printTxData("Common",tx)
+        receipt = await tx.wait()
+        printEvents(receipt)
         
 
     })
@@ -170,7 +186,7 @@ describe("Ether Cards contract", function () {
             value: ethers.utils.parseEther("1.0")       // ether in this case MUST be a string
         };
         tx = await token.connect(addr1).buyCard(0,oneEther)
-        await  data.printTxData("reverted sale",tx)
+        await  data.printTxData("first sale",tx)
         receipt = await tx.wait()
         expect(receipt.status).to.equal(1)
 
@@ -242,8 +258,7 @@ describe("Ether Cards contract", function () {
             tx = await random.setRand(lastNext,rd)
             await data.printTxData("setRand",tx)
             receipt = await tx.wait()
-            console.log(">>>>",receipt.logs.length);
-            console.log(">>>>",receipt.logs);
+            printEvents(receipt)
             lastNext++;
         }
         lastRandomRequested  = await token.lastRandomRequested();
@@ -270,12 +285,12 @@ describe("Ether Cards contract", function () {
     })
 
     it("processRandom", async() => {
-        np = await token.needProcessing();
-        expect(np).to.equal(true)
-        tx = await token.processRandom();
-        await data.printTxData("processRandom",tx)
-        receipt = await tx.wait()
-        printEvents(receipt)
+        while ( await token.needProcessing()){
+            tx = await token.connect(oracleSigner).processRandom();
+            await data.printTxData("processRandom",tx)
+            receipt = await tx.wait()
+            printEvents(receipt)
+        }
         // console.log("->",receipt.logs.length)
         // for (j = 0; j < receipt.logs.length; j++){
         //     console.log("log ",j, "->",lookup(receipt.logs[j].topics[0]),receipt.logs[j].data)
@@ -348,7 +363,7 @@ describe("Ether Cards contract", function () {
     it("processRandom2", async() => {
         np = await token.needProcessing();
         expect(np).to.equal(true)
-        tx = await token.processRandom();
+        tx = await token.connect(oracleSigner).processRandom();
         await data.printTxData("processRandom2",tx)
         receipt = await tx.wait()
         printEvents(receipt)
@@ -364,14 +379,14 @@ describe("Ether Cards contract", function () {
         a22 = await token.tokenOfOwnerByIndex(addr2.address,1)
         a23 = await token.tokenOfOwnerByIndex(addr3.address,1)
         a24 = await token.tokenOfOwnerByIndex(addr4.address,1)
-        console.log(a11,10)
-        console.log(a12,11)
-        console.log(a13,12)
-        console.log(a14,13)
-        console.log(a21,14)
-        console.log(a22,15)
-        console.log(a23,16)
-        console.log(a24,17)
+        console.log("a11",a11,10)
+        console.log("a12",a12,11)
+        console.log("a13",a13,12)
+        console.log("a14",a14,13)
+        console.log("a21",a21,14)
+        console.log("a22",a22,15)
+        console.log("a23",a23,16)
+        console.log("a24",a24,17)
 
     })
 

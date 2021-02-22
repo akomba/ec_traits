@@ -143,15 +143,14 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     function buyCard(uint card_type) external payable sale_active whenNotPaused {
         wallet.transfer(msg.value);
+        require(card_type < 3, "Invalid card type");
         if (card_type == 0) {
             require(msg.value >= OG_price(),"Price no longer valid");
-            return;
-        }
-        if (card_type == 1) {
+        } else if (card_type == 1) {
             require(msg.value >= ALPHA_price(),"Price no longer valid");
-            return;
-        }
-        require(msg.value >= RANDOM_price(),"Price no longer valid");
+        } else if (card_type == 0){
+            require(msg.value >= RANDOM_price(),"Price no longer valid");
+        }  
         assignCard(msg.sender,card_type);
     }
 
