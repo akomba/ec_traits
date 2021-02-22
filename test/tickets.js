@@ -26,6 +26,8 @@ describe("Ether Cards contract", function () {
 
     let  lastNext = 0;
 
+    let oracle;
+
     before(async function () {
     
         data = new Data();
@@ -36,6 +38,11 @@ describe("Ether Cards contract", function () {
         addr2 = data.user2Signer;
         addr3 = data.user3Signer;
         addr4 = data.user4Signer;
+
+        oracle = data.user8;
+
+        console.log(oracle)
+
         wallet = "0xb6c6920327B33f8eeC26786c7462c5F4098D47E3"
 
         bo = await provider.getBalance(owner.address)
@@ -44,6 +51,7 @@ describe("Ether Cards contract", function () {
         b3 = await provider.getBalance(addr3.address)
         b4 = await provider.getBalance(addr4.address)
         w1 =  await provider.getBalance(wallet)
+        o1 =  await provider.getBalance(oracle)
 
         console.log("owner",owner.address,ethers.utils.formatEther(bo))
         console.log("addr1",addr1.address,ethers.utils.formatEther(b1))
@@ -51,6 +59,8 @@ describe("Ether Cards contract", function () {
         console.log("addr3",addr3.address,ethers.utils.formatEther(b3))
         console.log("addr4",addr4.address,ethers.utils.formatEther(b4))
         console.log("wallet",addr4.address,ethers.utils.formatEther(w1))
+
+        console.log("oracle",oracle,ethers.utils.formatEther(o1))
 
         
 
@@ -71,27 +81,106 @@ describe("Ether Cards contract", function () {
         //console.log(traitHash, random.address, ogs, ogp, ags, agp, rgs, rgp); // print
 
         Token = await ethers.getContractFactory("ethercards");
-        token = await Token.deploy(traitHash, random.address, ogs,ogp, ags,agp, rgs,rgp,0,"1645137615",wallet);
+        token = await Token.deploy(traitHash, random.address, ogs,ogp, ags,agp, rgs,rgp,0,"1645137615",wallet, oracle);
         //console.log(Token.interface.events)
         addLookup(Token.interface.events["Chance"])
         addLookup(Token.interface.events["Resolution"])
+        addLookup(Token.interface.events["Transfer"])
         // for (j = 0; j < Token.interface.events.length; j++){
         //     console.log("events",Token.interface.events[j]);//,Token.interface.events.topic)
         // }
         
         await data.printTxData("Deploy token",token.deployTransaction);
-        console.log("-----")
+        console.log("-----setEC")
         await data.setEC(token,random);
-        console.log("---")
+        console.log("----")
         console.log(data.card.address, data.rng.address);
     })
 
+    it("founders cards ", async() => {
+        founders = [
+            "0xb6c6920327B33f8eeC26786c7462c5F4098D47E3",
+            "0xFef144aAFCA6b8Dd2E10907fe131C87636fc8334",
+            "0xbD172f38c1bc677A238F1a2c05746Ca8A3101279",
+            "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+            "0x19868B43Cc7e16f8a928c500400D24f1B5F2DcfF",
+            "0xe88f8313e61A97cEc1871EE37fBbe2a8bf3ed1E4",
+            "0xDE701F5466ea0a27AA9503D3B703F7B99aeD26f0",
+            "0x61189Da79177950A7272c88c6058b96d4bcD6BE2",
+            "0x84Ba85993744d6087172eB15A3924f307582810c",
+            "0x627fd152d3F7c420341FC08085e114769d03BCbb"
+        ]
+        tx = await token.mintFounders(founders);
+        await data.printTxData("founders",tx)
+        receipt = await tx.wait()
+        printEvents(receipt)
+        console.log("++++")
+        oneWei = ethers.utils.parseUnits("1","wei")
+        for (j = 0; j < 10; j++) {
+            tid = await token.tokenOfOwnerByIndex(founders[j],0)
+            serNo = await token.cardSerialNumber(tid)
+            console.log(founders[j],tid,serNo)
+        }
+        console.log("++founded++")
+
+    })
+
+    it ("presales", async() => {
+        psOG = [
+            "0xb6c6920327B33f8eeC26786c7462c5F4098D47E3",
+            "0xFef144aAFCA6b8Dd2E10907fe131C87636fc8334",
+            "0xbD172f38c1bc677A238F1a2c05746Ca8A3101279"
+        ]
+        psAlpha =[
+            "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+            "0x19868B43Cc7e16f8a928c500400D24f1B5F2DcfF",
+            "0xe88f8313e61A97cEc1871EE37fBbe2a8bf3ed1E4"
+        ]
+        psCommon = [
+            "0xDE701F5466ea0a27AA9503D3B703F7B99aeD26f0",
+            "0x61189Da79177950A7272c88c6058b96d4bcD6BE2",
+            "0x84Ba85993744d6087172eB15A3924f307582810c",
+            "0x627fd152d3F7c420341FC08085e114769d03BCbb"
+        ]
+
+        tx = await token.allocateManyCards(psOG,0);
+        await data.printTxData("OGS",tx)
+        token.allocateManyCards(psAlpha,1);
+        await data.printTxData("Alphas",tx)
+        token.allocateManyCards(psCommon,2);
+        await data.printTxData("Common",tx)
+        
+
+    })
+
     it ("start", async () => {
+        or = await token.OG_remaining()
+        ar = await token.ALPHA_remaining()
+        cr = await token.RANDOM_remaining()
+
+        op = await token.OG_price()
+        ap = await token.ALPHA_price()
+        cp = await token.RANDOM_price()
+        
+        console.log("o",ethers.utils.formatUnits(or,"wei"),ethers.utils.formatEther(op))
+        console.log("a",ethers.utils.formatUnits(ar,"wei"),ethers.utils.formatEther(ap))
+        console.log("c",ethers.utils.formatUnits(cr,"wei"),ethers.utils.formatEther(cp))
+        
         let oneEther = {
             value: ethers.utils.parseEther("1.0")       // ether in this case MUST be a string
         };
         tx = await token.connect(addr1).buyCard(0,oneEther)
-        await  data.printTxData("first sale",tx)
+        await  data.printTxData("reverted sale",tx)
+        receipt = await tx.wait()
+        expect(receipt.status).to.equal(1)
+
+    });
+
+    it ("wait and buy",async() => {
+        
+        
+        bal = await token.balanceOf(addr1.address)
+        console.log("addr1 has",ethers.utils.formatUnits(bal,"wei"))
         a10 = await token.tokenOfOwnerByIndex(addr1.address,0)
         console.log("first tokenId",a10)
         owned = await token.balanceOf(addr1.address)
@@ -186,10 +275,11 @@ describe("Ether Cards contract", function () {
         tx = await token.processRandom();
         await data.printTxData("processRandom",tx)
         receipt = await tx.wait()
-        console.log("->",receipt.logs.length)
-        for (j = 0; j < receipt.logs.length; j++){
-            console.log("log ",j, "->",lookup(receipt.logs[j].topics[0]),receipt.logs[j].data)
-        }
+        printEvents(receipt)
+        // console.log("->",receipt.logs.length)
+        // for (j = 0; j < receipt.logs.length; j++){
+        //     console.log("log ",j, "->",lookup(receipt.logs[j].topics[0]),receipt.logs[j].data)
+        // }
         
     })
 
@@ -261,10 +351,11 @@ describe("Ether Cards contract", function () {
         tx = await token.processRandom();
         await data.printTxData("processRandom2",tx)
         receipt = await tx.wait()
-        console.log("->",receipt.logs.length)
-        for (j = 0; j < receipt.logs.length; j++){
-            console.log("log ",j, "->",lookup(receipt.logs[j].topics[0]),receipt.logs[j].data)
-        }
+        printEvents(receipt)
+        // console.log("->",receipt.logs.length)
+        // for (j = 0; j < receipt.logs.length; j++){
+        //     console.log("log ",j, "->",lookup(receipt.logs[j].topics[0]),receipt.logs[j].data)
+        //}
         a11 = await token.tokenOfOwnerByIndex(addr1.address,0)
         a12 = await token.tokenOfOwnerByIndex(addr2.address,0)
         a13 = await token.tokenOfOwnerByIndex(addr3.address,0)
@@ -303,8 +394,11 @@ describe("Ether Cards contract", function () {
 
 
 
-    function printEvent(log) {
-        console.log(log);
+    function printEvents(receipt) {
+        console.log("->",receipt.logs.length)
+        for (j = 0; j < receipt.logs.length; j++){
+            console.log("log ",j, "->",lookup(receipt.logs[j].topics[0]),receipt.logs[j].data)
+        }
     }
 
     function addLookup(ev) {

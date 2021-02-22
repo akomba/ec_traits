@@ -179,6 +179,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
         require(founders.length == 10 && !founders_done, "There must be exactly 10 founders");
         for (uint j = 0; j < 10; j++) {
             _mint(founders[j],j);
+            tokenIdToSerial[j] = j;
         }
         founders_done = true;
     }
@@ -415,7 +416,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     // View Function to get graphic properties
 
-    function cardSerialNumber(uint tokenId) internal view returns (uint256) {
+    function cardSerialNumber(uint tokenId) public view returns (uint256) {
         require(tokenId < nextTokenId,"invalid tokenId");
         return tokenIdToSerial[tokenId];
     }
@@ -440,10 +441,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
 //        return FrameType((cardTrait(tokenId) >> 14) & 3);
     }
 
-    function cardNumber(uint tokenId) public view returns(uint24) {
-//        return cardTrait(tokenId) & 0x1fff;
-    }
-
+ 
     function pictureID(uint tokenId) public view returns(uint24) {
 //        return (cardTrait(tokenId) >> 16) & 0x1f;
     }
