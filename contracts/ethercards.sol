@@ -92,6 +92,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     bool    presale_closed;
     bool    founders_done;
     address oracle;
+    address controller;
 
 
     event OG_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
@@ -106,6 +107,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     event PresaleClosed();
     event OracleSet( address oracle);
+    event ControllerSet( address oracle);
     event SaleSet(uint256 start, uint256 end);
     event RandomSet(address random);
     event TraitHash(bytes32 traitHash);
@@ -113,6 +115,13 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     modifier onlyOracle() {
         require(msg.sender == oracle,"Not Authorised");
+        _;
+    }
+
+    modifier onlyAllowed() {
+        require(
+            msg.sender == owner() ||
+            msg.sender == controller,"Not Authorised");
         _;
     }
 
@@ -231,6 +240,11 @@ contract ethercards is ERC721 , Ownable, Pausable{
         emit OracleSet(_oracle);
     }
 
+   function setController(address _controller) external onlyOwner {
+        controller = _controller;
+        emit ControllerSet(_controller);
+    }
+
     // WEB3 SALE SUPPORT
 
 
@@ -305,7 +319,6 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     function resolve(uint256 random) internal {
         uint256 chances;
-        uint chance2;
         uint256 pos;
         uint256 r = random;
         if (oPending > 0) {
@@ -344,12 +357,6 @@ contract ethercards is ERC721 , Ownable, Pausable{
         uint256 chance = r & tr_ass_order_mask;
         emit Chance(chance);
         r = r >> tr_ass_order_length;
-        for (uint j = 0; j < chances; j++) {
-            chance2 = r & tr_ass_order_mask;
-            emit Chance(chance2);    
-            r = r >> tr_ass_order_length;
-            chance = Math.min(chance,chance2);
-        }
         uint256 tokenId = serialToTokenId[pos];
         tokenIdToSerial[tokenId] = pos; 
         traitAssignmentOrder[tokenId] = chance+1;
@@ -380,7 +387,8 @@ contract ethercards is ERC721 , Ownable, Pausable{
     //            card{j}.trait_assignment_order == card{j+1}.trait_assignment_order amd serNo[j] < serNo[j+1]
     //            AND card{j}.trait_assignment_order < card{j+1}.trait_assignment_order 
  
-    function FinaliseTokenOrder(uint16[] memory tokenIds, uint16[] memory traits, uint256 _numberToProcess) public onlyOwner {
+    function FinaliseTokenOrder(uint16[] memory tokenIds, uint16[] memory traits, uint256 _numberToProcess) public onlyAllowed {
+        CardType ct;
         require (keccak256(abi.encodePacked(traits)) == traitHash,"invalid Traits Hash");
         bytes32 idHash = keccak256(abi.encodePacked(tokenIds));
         if (startPos == 0) {
@@ -394,9 +402,16 @@ contract ethercards is ERC721 , Ownable, Pausable{
         uint start = startPos;
         uint end   = Math.min(startPos + numberToProcess,cMax+1);
         for (uint256 i = start; i < numberToProcess; i++) {
-            if (i > 0) {
-                require(validate(i,tokenIds[i]),"tokenIds in wrong order");
+            if (i < 10 || i == 10 || i == 100 || i == 1000) {
+                // founder card or first in any sequence
+                cardTraits[tokenIds[i]] = traits[i];
+                if (i == 10) ct =CardType.OG;
+                if (i == 100) ct =CardType.Alpha;
+                if (i == 1000) ct =CardType.Common;
+                
+                continue;
             }
+            require(validate(tokenIds[i-1],tokenIds[i],ct),"tokenIds in wrong order");
             cardTraits[tokenIds[i]] = traits[i];
         }
         if (end == cMax+1) {
@@ -408,11 +423,14 @@ contract ethercards is ERC721 , Ownable, Pausable{
         }
     }
 
-    function validate(uint prevTokenId, uint tokenId) internal view returns (bool) {
+    function validate(uint prevTokenId, uint tokenId, CardType ct) internal view returns (bool) {
         require(
             (traitAssignmentOrder[prevTokenId] < traitAssignmentOrder[tokenId]) ||
             ((traitAssignmentOrder[prevTokenId] == traitAssignmentOrder[tokenId]) && (tokenIdToSerial[prevTokenId] < tokenIdToSerial[tokenId])),
             "Traits in incorrect order");
+        // ensure that the traits are in same group
+        require(cardType(tokenId) == ct,"Cards of wrong type");
+        require(cardType(tokenId) == cardType(prevTokenId),"Cards of different types");
     }
 
         
