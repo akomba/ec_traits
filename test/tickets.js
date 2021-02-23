@@ -83,7 +83,7 @@ describe("Ether Cards contract", function () {
         //console.log(traitHash, random.address, ogs, ogp, ags, agp, rgs, rgp); // print
 
         Token = await ethers.getContractFactory("ethercards");
-        token = await Token.deploy(traitHash, random.address, ogs,ogp, ags,agp, rgs,rgp,0,"1645137615",wallet, oracle);
+        token = await Token.deploy(traitHash, random.address, 0,"1645137615",wallet, oracle);
         //console.log(Token.interface.events)
         addLookup(Token.interface.events["Chance"])
         addLookup(Token.interface.events["Resolution"])
@@ -98,6 +98,8 @@ describe("Ether Cards contract", function () {
         // }
         
         await data.printTxData("Deploy token",token.deployTransaction);
+        tx = await token.setCurve(ogs,ogp, ags,agp, rgs,rgp)
+        await data.printTxData("set curve",tx)
         console.log("-----setEC")
         await data.setEC(token,random);
         console.log("----")

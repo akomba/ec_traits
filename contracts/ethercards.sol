@@ -42,6 +42,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     // sale conditions
     uint256   sale_start;
     uint256   sale_end;
+    bool      curve_set;
 
 
     // sold AND resolved
@@ -121,32 +122,35 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     constructor(
         bytes32 _traitHash, IRNG _rng, 
-        uint256[] memory _og_stop, uint256[] memory _og_price,
-        uint256[] memory _alpha_stop, uint256[] memory _alpha_price,
-        uint256[] memory _random_stop, uint256[] memory _random_price,
         uint256 _start, uint256 _end,
         address payable _wallet, address _oracle
         ) ERC721("Ether Cards Founder","ECF") {
             console.log("constructor");
         traitHash = _traitHash;
         rng = _rng;
-        og_stop = _og_stop;
-        og_price = _og_price;
-        alpha_stop = _alpha_stop;
-        alpha_price = _alpha_price;
-        random_stop = _random_stop;
-        random_price = _random_price;
         sale_start = _start;
         sale_end = _end;
         wallet = _wallet;
         oracle = _oracle;
-
 // need events
         emit OracleSet(_oracle);
         emit SaleSet(_start,_end);
         emit RandomSet(address(_rng));
         emit TraitHash(_traitHash);
         emit WheresWallet(_wallet);
+    }
+
+    function setCurve(
+        uint256[] memory _og_stop, uint256[] memory _og_price,
+        uint256[] memory _alpha_stop, uint256[] memory _alpha_price,
+        uint256[] memory _random_stop, uint256[] memory _random_price) external onlyOwner {
+        og_stop = _og_stop;
+        og_price = _og_price;
+        alpha_stop = _alpha_stop;
+        alpha_price = _alpha_price;
+        random_stop = _random_stop;
+        random_price = _random_price;
+        curve_set = true;
     }
 
 
@@ -273,6 +277,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
  
     function assignCard(address buyer, uint256 card_type) internal {
+        require(curve_set,"prece curve not set");
         _mint(buyer,nextTokenId);
         request_random_if_needed();
         if (card_type == 0) {
