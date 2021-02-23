@@ -35,7 +35,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     uint256   constant feature_trait_offset   = frame_trait_offset + 8;
     uint256   constant faketoshi_trait_mask     = 0x01;
     uint256   constant faketoshi_trait_offset   = feature_trait_offset + 8;
-    uint256   constant extra_trait_offset       =  128;//faketoshi_trait_offset + 1;
+    uint256   constant extra_trait_offset       =  faketoshi_trait_offset + 1;
 
 
 
@@ -451,20 +451,20 @@ contract ethercards is ERC721 , Ownable, Pausable{
     }
 
     function frameTrait(uint tokenId) public view returns(uint256) {
-        return (fullTrait(tokenId) >> frame_trait_offset) & frame_trait_offset;
+        return (fullTrait(tokenId) >> frame_trait_offset) & frame_trait_mask;
     }
 
  
     function pictureTrait(uint tokenId) public view returns(uint256) {
-        return (fullTrait(tokenId) >> picture_trait_offset) & picture_trait_offset;
+        return (fullTrait(tokenId) >> picture_trait_offset) & picture_trait_mask;
     }
 
     function featureTrait(uint tokenId) public view returns(uint256) {
-        return (fullTrait(tokenId) >> feature_trait_offset) & feature_trait_offset;
+        return (fullTrait(tokenId) >> feature_trait_offset) & feature_trait_mask;
     }
 
     function faketoshiTrait(uint256 tokenId) public view returns (uint256) {
-        return (fullTrait(tokenId) >> faketoshi_trait_offset) & faketoshi_trait_offset;
+        return (fullTrait(tokenId) >> faketoshi_trait_offset) & faketoshi_trait_mask;
     }
 
     function extraTrait(uint256 tokenId) public view returns (uint256) {
