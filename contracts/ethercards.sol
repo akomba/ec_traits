@@ -515,5 +515,31 @@ contract ethercards is ERC721 , Ownable, Pausable{
         return (fullTrait(tokenId) >> extra_trait_offset);
     }
    
- 
+ function OG_next() external view returns (uint256 left, uint256 nextPrice) {
+        return CARD_next(og_stop,oSold,oPending,og_pointer);
+        // left = og_stop[og_pointer] - (oSold + oPending);
+        // if (og_pointer < og_stop.length - 1)
+        //     nextPrice = og_stop[og_pointer+1];
+        // else
+            // nextPrice = og_stop[og_pointer+1];
+    }
+
+    function ALPHA_next() external view returns (uint256 left, uint256 nextPrice) {
+            return CARD_next(alpha_stop,aSold,aPending,alpha_pointer);
+    }
+    function RANDOM_next() external view returns (uint256 left, uint256 nextPrice) {
+            return CARD_next(random_stop,rSold,rPending,random_pointer);
+    }
+
+    function CARD_next(uint256[] storage stop, uint256 sold, uint256 pending, uint256 pointer) internal view returns (uint256 left, uint256 nextPrice) {
+        left = stop[pointer] - (sold + pending);
+        if (pointer < stop.length - 1)
+            nextPrice = stop[pointer+1];
+        else
+            nextPrice = stop[pointer];
+    }
+18m
+
+
+
 }
