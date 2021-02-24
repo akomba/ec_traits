@@ -134,6 +134,20 @@ describe("Ether Cards contract", function () {
 
     })
 
+    it("remaining", async() => {
+        or = await token.OG_remaining()
+        ar = await token.ALPHA_remaining()
+        cr = await token.RANDOM_remaining()
+
+        // op = await token.OG_price()
+        // ap = await token.ALPHA_price()
+        // cp = await token.RANDOM_price()
+
+        console.log("OG REMAINING",ethers.utils.formatUnits(or,"wei"))
+        console.log("AL REMAINING",ethers.utils.formatUnits(ar,"wei"))
+        console.log("RD REMAINING",ethers.utils.formatUnits(cr,"wei"))
+    })
+
     it ("presales", async() => {
         psOG = [
             "0xb6c6920327B33f8eeC26786c7462c5F4098D47E3",
@@ -167,18 +181,24 @@ describe("Ether Cards contract", function () {
         await data.printTxData("Common",tx)
         receipt = await tx.wait()
         printEvents(receipt)
-        
+        console.log("Close presale")
+        tx = await token.closePresale()
+        await data.printTxData("Close Presale",tx)
+        receipt = await tx.wait()
+        printEvents(receipt)
 
     })
 
     it ("start", async () => {
-        or = await token.OG_remaining()
-        ar = await token.ALPHA_remaining()
-        cr = await token.RANDOM_remaining()
 
         op = await token.OG_price()
         ap = await token.ALPHA_price()
         cp = await token.RANDOM_price()
+
+        or = await token.OG_remaining()
+        ar = await token.ALPHA_remaining()
+        cr = await token.RANDOM_remaining()
+        
         
         console.log("o",ethers.utils.formatUnits(or,"wei"),ethers.utils.formatEther(op))
         console.log("a",ethers.utils.formatUnits(ar,"wei"),ethers.utils.formatEther(ap))
@@ -247,12 +267,12 @@ describe("Ether Cards contract", function () {
         let lastRandomRequested  = await token.lastRandomRequested();
         let lastRandomProcessed  = await token.lastRandomProcessed();
         let randomRequests  = await token.randomRequests(lastRandomProcessed);
-        let randomOneOfFour  = await token.randomOneOfFour();
+        let randomOneOfEight  = await token.randomOneOfEight();
 
         console.log("randomRequests",randomRequests)
         console.log("lastRandomRequested",lastRandomRequested)
         console.log("lastRandomProcessed",lastRandomProcessed)
-        console.log("randomOneOfFour",randomOneOfFour)
+        console.log("randomOneOfEight",randomOneOfEight)
 
         while (lastNext < next) {
             console.log("new random", lastNext)
@@ -266,7 +286,7 @@ describe("Ether Cards contract", function () {
         lastRandomRequested  = await token.lastRandomRequested();
         lastRandomProcessed  = await token.lastRandomProcessed();
         randomRequests  = await token.randomRequests(lastRandomProcessed);
-        randomOneOfFour  = await token.randomOneOfFour();
+        randomOneOfEight  = await token.randomOneOfEight();
         op = await token.oPending();
         ap = await token.aPending();
         rp = await token.rPending();
@@ -278,7 +298,7 @@ describe("Ether Cards contract", function () {
         console.log("randomRequests",randomRequests)
         console.log("lastRandomRequested",lastRandomRequested)
         console.log("lastRandomProcessed",lastRandomProcessed)
-        console.log("randomOneOfFour",randomOneOfFour)
+        console.log("randomOneOfEight",randomOneOfEight)
 
         np = await token.needProcessing();
         expect(np).to.equal(true)

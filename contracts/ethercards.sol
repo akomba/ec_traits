@@ -13,7 +13,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     IRNG rng;
 
-    enum CardType { OG, Alpha, Common, Founder, Unresolved } 
+    enum CardType { OG, Alpha, Random, Common, Founder,  Unresolved } 
     enum FrameType { Common, Silver, Gold, Epic } 
 
 
@@ -58,7 +58,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     mapping (uint256 => uint32) public randomRequests;
     uint256                     public lastRandomRequested;
     uint256                     public lastRandomProcessed;
-    uint256                     public randomOneOfFour;
+    uint256                     public randomOneOfEight;
 
     // pricing stuff
     uint256[]                   og_stop;
@@ -112,6 +112,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     event RandomSet(address random);
     event TraitHash(bytes32 traitHash);
     event WheresWallet(address wallet);
+    event Upgrade(uint256 TokenID, uint256 position);
 
     modifier onlyOracle() {
         require(msg.sender == oracle,"Not Authorised");
@@ -164,8 +165,12 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
 
     // ENTRY POINT TO SALE CONTRACT
+    // 0 = OG
+    // 1 = ALPHA
+    // 2 = RANDOM
 
     function buyCard(uint card_type) external payable sale_active whenNotPaused {
+        require(presale_closed,"Presale needs to be closed first");
         string memory pnv = "Price no longer valid";
         wallet.transfer(msg.value);
         require(card_type < 3, "Invalid card type");
@@ -180,8 +185,13 @@ contract ethercards is ERC721 , Ownable, Pausable{
     }
 
     // PRESALE FUNCTIONS
+    // 0 - OG
+    // 1 - ALPHA
+    // 2 - COMMON
 
     function allocateManyCards(address[] memory buyers, uint256 card_type) external onlyOwner {
+        require(founders_done, "mint founders first");
+        require(card_type < 3 , "Invalid Card Type");
         require(!presale_closed,"Presale is over");
         for (uint j = 0; j < buyers.length; j++) {
             assignCard(buyers[j],card_type);
@@ -189,11 +199,18 @@ contract ethercards is ERC721 , Ownable, Pausable{
     }
     
     function allocateCard(address buyer, uint256 card_type) external onlyOwner {
+        require(founders_done, "mint founders first");
+        require(card_type < 3, "Invalid Card Type");
+        require(!presale_closed,"Presale is over");
         assignCard(buyer,card_type);
     }
 
     function closePresale() external onlyOwner {
         presale_closed = true;
+        if (randomOneOfEight % 8 != 0) {
+            request_random();
+            randomOneOfEight = 0;
+        }
         emit PresaleClosed();
     }
 
@@ -212,7 +229,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     // Extra Traits
 
-    function setExtraTraits(uint256 tokenId, uint256 bitNumber) public onlyOwner {
+    function setExtraTraits(uint256 tokenId, uint256 bitNumber) public onlyAllowed {
         require((bitNumber >= extra_trait_offset) && (bitNumber < 256), "illegal bit number");
         cardTraits[tokenId] |=   (1 << bitNumber);
     }
@@ -226,12 +243,12 @@ contract ethercards is ERC721 , Ownable, Pausable{
     function processRandom() external onlyOracle {
         require(needProcessing(),"not ready");
         uint random = nextRandom();
-        for (uint i = 0; i < 4; i++) {
+        for (uint i = 0; i < 8; i++) {
             if (oPending + rPending +aPending == 0) {
                 return;
             }
-            resolve(random & 0xffffffffffffffff);
-            random = random >> 64;
+            resolve(random & 0xffffffff);
+            random = random >> 32;
         }
     }
 
@@ -284,7 +301,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
 
     function request_random_if_needed() internal {
-        if (randomOneOfFour++ % 4 == 3) {
+        if (randomOneOfEight++ % 8 == 7) {
             request_random();
         }
     }
@@ -318,41 +335,45 @@ contract ethercards is ERC721 , Ownable, Pausable{
     }
 
     function resolve(uint256 random) internal {
-        uint256 chances;
+        bool upgrade;
         uint256 pos;
         uint256 r = random;
         if (oPending > 0) {
-            chances = 2;
             pos = oStart+oSold++;
             oPending--;
         } else if (aPending > 0) {
-            chances = 1;
             pos = aStart + aSold++;
             aPending--;
         } else if (rPending > 0) {
-            uint tID = serialToTokenId[cStart+rSold];
-            // draw for what kind of card it is
-            uint256 remainingTickets = oMax - oSold + aMax - aSold + cMax - rSold + 3;
-            pos = r % remainingTickets;
-            r = r / remainingTickets;
-            if (pos <= (oMax - oSold)) {
-                chances = 2;
-                pos = oStart + oSold++;
-                og_pointer = bump(oSold,oPending,og_stop,og_pointer);
-            } else if (pos <= oMax - oSold + aMax - aSold + 1) {
-                chances = 1;
-                pos = aStart + aSold++;
-                alpha_pointer = bump(aSold , aPending , alpha_stop,alpha_pointer);
+            if (presale_closed) {
+                uint tID = serialToTokenId[cStart+rSold];
+                // draw for what kind of card it is
+                uint256 remainingTickets = oMax - oSold + aMax - aSold + cMax - rSold + 3;
+                pos = r % remainingTickets;
+                r = r / remainingTickets;
+                if (pos <= (oMax - oSold)) {
+                    upgrade = true;
+                    pos = oStart + oSold++;
+                    og_pointer = bump(oSold,oPending,og_stop,og_pointer);
+                } else if (pos <= oMax - oSold + aMax - aSold + 1) {
+                    upgrade = true;
+                    pos = aStart + aSold++;
+                    alpha_pointer = bump(aSold , aPending , alpha_stop,alpha_pointer);
+                } else {
+                    upgrade = false;
+                    pos = cStart + rSold++;
+                }
+                if (upgrade) {
+                    emit Upgrade(tID, pos);
+                    // the Random[x] is now no longer a random card
+                    serialToTokenId[pos] = tID; // move the tokenId
+                    serialToTokenId[cStart+rSold] = serialToTokenId[cStart+rSold+rPending]; // bring last in to fill gap
+                }
+                rPending--;
             } else {
-                chances = 0;
                 pos = cStart + rSold++;
+                rPending--;
             }
-            if (chances != 0) {
-                // the Random[x] is now no longer a random card
-                serialToTokenId[pos] = tID; // move the tokenId
-                serialToTokenId[cStart+rSold] = serialToTokenId[cStart+rSold+rPending]; // bring last in to fill gap
-            }
-            rPending--;
         }   
         uint256 chance = r & tr_ass_order_mask;
         emit Chance(chance);
