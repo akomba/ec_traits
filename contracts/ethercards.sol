@@ -48,11 +48,11 @@ contract ethercards is ERC721 , Ownable, Pausable{
     // sold AND resolved
     uint256   oSold;
     uint256   aSold;
-    uint256   rSold;
+    uint256   cSold;
     // pending resolution
     uint256   public oPending;
     uint256   public aPending;
-    uint256   public rPending;
+    uint256   public cPending;
     uint256   public nextTokenId = 10;
     // Random Stuff
     mapping (uint256 => uint32) public randomRequests;
@@ -237,14 +237,14 @@ contract ethercards is ERC721 , Ownable, Pausable{
     // ORACLE ACTIVATION
 
     function needProcessing() public view returns (bool) {
-        return (oPending + rPending +aPending > 3 || nextTokenId > cMax) && randomAvailable();
+        return (oPending + cPending +aPending > 3 || nextTokenId > cMax) && randomAvailable();
     }
 
     function processRandom() external onlyOracle {
         require(needProcessing(),"not ready");
         uint random = nextRandom();
         for (uint i = 0; i < 8; i++) {
-            if (oPending + rPending +aPending == 0) {
+            if (oPending + cPending +aPending == 0) {
                 return;
             }
             resolve(random & 0xffffffff);
@@ -274,7 +274,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     }
 
     function RANDOM_remaining() public view returns (uint256) {
-        return cMax - (cStart + rSold + rPending)+1;
+        return cMax - (cStart + cSold + cPending)+1;
     }
 
     function OG_price() public view returns (uint256) {
@@ -311,7 +311,8 @@ contract ethercards is ERC721 , Ownable, Pausable{
         require(curve_set,"prece curve not set");
         _mint(buyer,nextTokenId);
         request_random_if_needed();
-        if (card_type == 0) {
+        require((OG_remaining() > 0) || (ALPHA_remaining() > 0) ||  (RANDOM_remaining() > 0),"All Cards Sold Out!!");
+        if ((card_type == 0) || ((card_type == 2) && (ALPHA_remaining() == 0) &&  (RANDOM_remaining() == 0)) ) {
             require (OG_remaining() > 0, "Sorry, no OG cards available");
             emit OG_Ordered(msg.sender, msg.value,oStart+oSold+oPending,nextTokenId);
             serialToTokenId[oStart+oSold+oPending] = nextTokenId++;
@@ -319,7 +320,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
             og_pointer = bump(oSold,oPending,og_stop,og_pointer);
             return;
         }
-        if (card_type == 1) {
+        if ((card_type == 1) || ((card_type == 2) && (RANDOM_remaining() == 0))) {
             require (ALPHA_remaining() > 0,"Sorry - no Alpha tickets available");
             emit ALPHA_Ordered(msg.sender, msg.value,aStart+aSold+aPending,nextTokenId);
             serialToTokenId[aStart + aSold + aPending] = nextTokenId++;
@@ -328,10 +329,10 @@ contract ethercards is ERC721 , Ownable, Pausable{
             return;
         }
         require(RANDOM_remaining() > 0, "Sorry no random tickets available");
-        emit RANDOM_Ordered(msg.sender, msg.value,cStart+rSold+rPending,nextTokenId);
-        serialToTokenId[cStart + rSold + rPending] = nextTokenId++;
-        rPending++;
-        random_pointer = bump(rSold , rPending , random_stop,random_pointer);
+        emit RANDOM_Ordered(msg.sender, msg.value,cStart+cSold+cPending,nextTokenId);
+        serialToTokenId[cStart + cSold + cPending] = nextTokenId++;
+        cPending++;
+        random_pointer = bump(cSold , cPending , random_stop,random_pointer);
     }
 
     function resolve(uint256 random) internal {
@@ -344,37 +345,46 @@ contract ethercards is ERC721 , Ownable, Pausable{
         } else if (aPending > 0) {
             pos = aStart + aSold++;
             aPending--;
-        } else if (rPending > 0) {
+        } else if (cPending > 0) {
             if (presale_closed) {
-                uint tID = serialToTokenId[cStart+rSold];
+                uint tID = serialToTokenId[cStart+cSold];
                 // draw for what kind of card it is
-                uint256 remainingTickets = oMax - oSold + aMax - aSold + cMax - rSold + 3;
+                uint256 remainingTickets = OG_remaining() + ALPHA_remaining() + RANDOM_remaining();
                 pos = r % remainingTickets;
                 r = r / remainingTickets;
-                if (pos <= (oMax - oSold)) {
+                if (pos <= OG_remaining()) {
                     upgrade = true;
                     pos = oStart + oSold++;
                     og_pointer = bump(oSold,oPending,og_stop,og_pointer);
-                } else if (pos <= oMax - oSold + aMax - aSold + 1) {
+                } else if (pos <= OG_remaining() + ALPHA_remaining()) {
                     upgrade = true;
                     pos = aStart + aSold++;
                     alpha_pointer = bump(aSold , aPending , alpha_stop,alpha_pointer);
                 } else {
                     upgrade = false;
-                    pos = cStart + rSold++;
+                    pos = cStart + cSold++;
                 }
                 if (upgrade) {
                     emit Upgrade(tID, pos);
                     // the Random[x] is now no longer a random card
                     serialToTokenId[pos] = tID; // move the tokenId
-                    serialToTokenId[cStart+rSold] = serialToTokenId[cStart+rSold+rPending]; // bring last in to fill gap
+                    uint tailTokenID = serialToTokenId[cStart+cSold+cPending];
+                    if (tailTokenID == 0) {
+                        emit BadEnd(tailTokenID, cStart,cSold,cPending);
+                    } else {
+                        emit GoodEnd(tailTokenID, cStart,cSold,cPending);
+                    }
+                    serialToTokenId[cStart+cSold] = tailTokenID; // bring last in to fill gap
                 }
-                rPending--;
+                cSold++; // <--- still necessary 
+                cPending--;
             } else {
-                pos = cStart + rSold++;
-                rPending--;
+                pos = cStart + cSold++;
+                cPending--;
             }
-        }   
+        } else {
+            return; // NOTHING TO DO
+        }
         uint256 chance = r & tr_ass_order_mask;
         emit Chance(chance);
         r = r >> tr_ass_order_length;
@@ -528,7 +538,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
             return CARD_next(alpha_stop,aSold,aPending,alpha_pointer);
     }
     function RANDOM_next() external view returns (uint256 left, uint256 nextPrice) {
-            return CARD_next(random_stop,rSold,rPending,random_pointer);
+            return CARD_next(random_stop,cSold,cPending,random_pointer);
     }
 
     function CARD_next(uint256[] storage stop, uint256 sold, uint256 pending, uint256 pointer) internal view returns (uint256 left, uint256 nextPrice) {
@@ -538,8 +548,5 @@ contract ethercards is ERC721 , Ownable, Pausable{
         else
             nextPrice = stop[pointer];
     }
-18m
-
-
 
 }
