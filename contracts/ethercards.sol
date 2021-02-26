@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./interfaces/IRNG.sol";
-import "hardhat/console.sol";
 
 contract ethercards is ERC721 , Ownable, Pausable{
 
@@ -135,7 +134,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
         uint256 _start, uint256 _end,
         address payable _wallet, address _oracle
         ) ERC721("Ether Cards Founder","ECF") {
-            console.log("constructor");
+
         traitHash = _traitHash;
         rng = _rng;
         sale_start = _start;
@@ -178,7 +177,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
             require(msg.value >= OG_price(),pnv);
         } else if (card_type == 1) {
             require(msg.value >= ALPHA_price(),pnv);
-        } else if (card_type == 0){
+        } else if (card_type == 2){
             require(msg.value >= RANDOM_price(),pnv);
         }  
         assignCard(msg.sender,card_type);
@@ -237,7 +236,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     // ORACLE ACTIVATION
 
     function needProcessing() public view returns (bool) {
-        return (oPending + cPending +aPending > 3 || nextTokenId > cMax) && randomAvailable();
+        return (oPending + cPending +aPending > 7 || nextTokenId > cMax) && randomAvailable();
     }
 
     function processRandom() external onlyOracle {
@@ -376,7 +375,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
                     }
                     serialToTokenId[cStart+cSold] = tailTokenID; // bring last in to fill gap
                 }
-                cSold++; // <--- still necessary 
+                // cSold++; // <--- still necessary MAYBE NOT
                 cPending--;
             } else {
                 pos = cStart + cSold++;
@@ -387,7 +386,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
         }
         uint256 chance = r & tr_ass_order_mask;
         emit Chance(chance);
-        r = r >> tr_ass_order_length;
+        
         uint256 tokenId = serialToTokenId[pos];
         tokenIdToSerial[tokenId] = pos; 
         traitAssignmentOrder[tokenId] = chance+1;
