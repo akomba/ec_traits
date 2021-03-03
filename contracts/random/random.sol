@@ -5,38 +5,37 @@ import "../interfaces/IRNG.sol";
 
 contract random is IRNG {
     
-    uint32 public next = 0;
+    uint public next = 0;
 
-    mapping(uint32 => uint256) responses;
-    mapping(uint32 => bool) responded;
+    mapping(bytes32 => uint256) responses;
+    mapping(bytes32 => bool) responded;
     
 
 
-    event Request(uint32 number);
+    event Request(uint number);
     event RandomReceived(uint requestId,uint rand);
 
-    function requestRandomNumber() external override returns (uint32 requestId) {
+    function requestRandomNumber() external override returns (bytes32 requestId) {
         emit Request(next);
-        return next++;
+        return bytes32(next++);
     }
 
-    function isRequestComplete(uint32 requestId) external override view returns (bool isCompleted) {
+    function isRequestComplete(bytes32 requestId) external override view returns (bool isCompleted) {
         return responded[requestId];
     } 
 
-    function randomNumber(uint32 requestId) external view override returns (uint256 randomNum) {
+    function randomNumber(bytes32 requestId) external view override returns (uint256 randomNum) {
         require(this.isRequestComplete(requestId), "Not ready");
         return responses[requestId];
     }
 
     // back end
 
-    function setRand(uint32 requestId, uint256 rand) external {
+    function setRand(uint requestId, uint256 rand) external {
         require (requestId < next, "bad ID");
-        responses[requestId] = rand;
-        responded[requestId] = true;
+        responses[bytes32(requestId)] = rand;
+        responded[bytes32(requestId)] = true;
         emit RandomReceived(requestId,rand);
     }
-
 
 }

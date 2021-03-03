@@ -8,6 +8,11 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./interfaces/IRNG.sol";
 
+abstract contract xERC20 {
+    function transfer(address,uint256) public virtual returns (bool);
+    function balanceOf(address) public view virtual returns (uint256);
+}
+
 contract ethercards is ERC721 , Ownable, Pausable{
 
     IRNG rng;
@@ -26,15 +31,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     uint256   constant tr_ass_order_length = 14;
     uint256   constant tr_ass_order_mask   = 0x3ff;
 
-    uint256   constant picture_trait_mask     = 0x0ff;
-    uint256   constant picture_trait_offset   = 0;
-    uint256   constant frame_trait_mask     = 0x0ff;
-    uint256   constant frame_trait_offset   = picture_trait_offset + 8;
-    uint256   constant feature_trait_mask     = 0x0ff;
-    uint256   constant feature_trait_offset   = frame_trait_offset + 8;
-    uint256   constant faketoshi_trait_mask     = 0x01;
-    uint256   constant faketoshi_trait_offset   = feature_trait_offset + 8;
-    uint256   constant extra_trait_offset       =  faketoshi_trait_offset + 1;
+    uint256   extra_trait_offset ;
 
 
 
@@ -51,10 +48,10 @@ contract ethercards is ERC721 , Ownable, Pausable{
     // pending resolution
     uint256   public oPending;
     uint256   public aPending;
-    uint256   public cPending;
+    
     uint256   public nextTokenId = 10;
     // Random Stuff
-    mapping (uint256 => uint32) public randomRequests;
+    mapping (uint256 => bytes32) public randomRequests;
     uint256                     public lastRandomRequested;
     uint256                     public lastRandomProcessed;
     uint256                     public randomOneOfEight;
@@ -84,15 +81,38 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
     mapping(uint256 => uint256) serialToTokenId;
     mapping(uint256 => uint256) tokenIdToSerial;
-
     mapping(uint256 => uint256) cardTraits;
 
+// ----- RANDOM QUEUE HANDLING
+    mapping(uint256 => uint256) pendingRandomTokens;  // holds tokenIds
+    uint  pendingRandomHead;
+    uint  pendingRandomTail;
+
+    function pendingRandoms() public view returns (uint256) {
+        return pendingRandomHead - pendingRandomTail;
+    }
+
+    function addRandom(uint tokenId) internal {
+        pendingRandomTokens[pendingRandomHead] = tokenId;
+        pendingRandomHead++;
+    }
+
+    event RandomOrderGot(uint tokenId,uint  pendingRandomTail);
+
+    function getRandom() public returns (uint256 tokenId) {
+        require(pendingRandoms() > 0,"No randoms to assign");
+        tokenId = pendingRandomTokens[pendingRandomTail];
+        delete pendingRandomTokens[pendingRandomTail];
+        emit RandomOrderGot(tokenId,pendingRandomTail);
+        pendingRandomTail++;
+    }
+
+    //------END OF RANDOM QUEUE
 
     bool    presale_closed;
     bool    founders_done;
     address oracle;
     address controller;
-
 
     event OG_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
     event ALPHA_Ordered(address buyer, uint256 price_paid, uint256 demand, uint256 orderID);
@@ -112,6 +132,10 @@ contract ethercards is ERC721 , Ownable, Pausable{
     event TraitHash(bytes32 traitHash);
     event WheresWallet(address wallet);
     event Upgrade(uint256 TokenID, uint256 position);
+
+    event UpgradeToOG(uint256 tokenID,uint256 pos);
+    event UpgradeToAlpha(uint256 tokenID,uint256 pos);
+    event AssignedCommon(uint256 tokenID,uint256 pos);
 
     modifier onlyOracle() {
         require(msg.sender == oracle,"Not Authorised");
@@ -160,6 +184,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
         random_stop = _random_stop;
         random_price = _random_price;
         curve_set = true;
+        _setBaseURI("temp.ether.cards/metadata");
     }
 
 
@@ -233,17 +258,22 @@ contract ethercards is ERC721 , Ownable, Pausable{
         cardTraits[tokenId] |=   (1 << bitNumber);
     }
 
+    function setExtraTraitOffset(uint256 _offset) public onlyOwner {
+        require(extra_trait_offset == 0, "Extra Trait offset already set");
+        extra_trait_offset = _offset;
+    }
+
     // ORACLE ACTIVATION
 
     function needProcessing() public view returns (bool) {
-        return (oPending + cPending +aPending > 7 || nextTokenId > cMax) && randomAvailable();
+        return (oPending + pendingRandoms()  +aPending > 7 || nextTokenId > cMax) && randomAvailable();
     }
 
     function processRandom() external onlyOracle {
         require(needProcessing(),"not ready");
         uint random = nextRandom();
         for (uint i = 0; i < 8; i++) {
-            if (oPending + cPending +aPending == 0) {
+            if (oPending + pendingRandoms() +aPending == 0) {
                 return;
             }
             resolve(random & 0xffffffff);
@@ -273,7 +303,7 @@ contract ethercards is ERC721 , Ownable, Pausable{
     }
 
     function RANDOM_remaining() public view returns (uint256) {
-        return cMax - (cStart + cSold + cPending)+1;
+        return cMax - (cStart + cSold + pendingRandoms())+1;
     }
 
     function OG_price() public view returns (uint256) {
@@ -307,90 +337,83 @@ contract ethercards is ERC721 , Ownable, Pausable{
 
  
     function assignCard(address buyer, uint256 card_type) internal {
-        require(curve_set,"prece curve not set");
-        _mint(buyer,nextTokenId);
+        require(curve_set,"price curve not set");
+        uint tokenID = nextTokenId++;
+        _mint(buyer,tokenID);
         request_random_if_needed();
         require((OG_remaining() > 0) || (ALPHA_remaining() > 0) ||  (RANDOM_remaining() > 0),"All Cards Sold Out!!");
         if ((card_type == 0) || ((card_type == 2) && (ALPHA_remaining() == 0) &&  (RANDOM_remaining() == 0)) ) {
             require (OG_remaining() > 0, "Sorry, no OG cards available");
-            emit OG_Ordered(msg.sender, msg.value,oStart+oSold+oPending,nextTokenId);
-            serialToTokenId[oStart+oSold+oPending] = nextTokenId++;
+            emit OG_Ordered(msg.sender, msg.value,oStart+oSold+oPending,tokenID);
+            serialToTokenId[oStart+oSold+oPending] = tokenID;
             oPending++;
             og_pointer = bump(oSold,oPending,og_stop,og_pointer);
             return;
         }
         if ((card_type == 1) || ((card_type == 2) && (RANDOM_remaining() == 0))) {
             require (ALPHA_remaining() > 0,"Sorry - no Alpha tickets available");
-            emit ALPHA_Ordered(msg.sender, msg.value,aStart+aSold+aPending,nextTokenId);
-            serialToTokenId[aStart + aSold + aPending] = nextTokenId++;
+            emit ALPHA_Ordered(msg.sender, msg.value,aStart+aSold+aPending,tokenID);
+            serialToTokenId[aStart + aSold + aPending] = tokenID;
             aPending++;
             alpha_pointer = bump(aSold , aPending , alpha_stop,alpha_pointer);
             return;
         }
         require(RANDOM_remaining() > 0, "Sorry no random tickets available");
-        emit RANDOM_Ordered(msg.sender, msg.value,cStart+cSold+cPending,nextTokenId);
-        serialToTokenId[cStart + cSold + cPending] = nextTokenId++;
-        cPending++;
-        random_pointer = bump(cSold , cPending , random_stop,random_pointer);
+        emit RANDOM_Ordered(msg.sender, msg.value,cStart+cSold+pendingRandoms(),tokenID);
+        addRandom(tokenID);
+        random_pointer = bump(cSold , pendingRandoms() , random_stop,random_pointer);
     }
 
-    function resolve(uint256 random) internal {
+   event NothingToDo();
+ 
+   function resolve(uint256 random) internal {
         bool upgrade;
-        uint256 pos;
+        uint256 card_pos;
+        uint256 draw_pos;  // let's not get them confused
         uint256 r = random;
         if (oPending > 0) {
-            pos = oStart+oSold++;
+            card_pos = oStart+oSold++;
             oPending--;
         } else if (aPending > 0) {
-            pos = aStart + aSold++;
+            card_pos = aStart + aSold++;
             aPending--;
-        } else if (cPending > 0) {
+        } else if (pendingRandoms() > 0) {
+            // get tokenId to assign
+            uint tokenID = getRandom();
             if (presale_closed) {
-                uint tID = serialToTokenId[cStart+cSold];
                 // draw for what kind of card it is
                 uint256 remainingTickets = OG_remaining() + ALPHA_remaining() + RANDOM_remaining();
-                pos = r % remainingTickets;
+                draw_pos = r % remainingTickets;
                 r = r / remainingTickets;
-                if (pos <= OG_remaining()) {
+                if (draw_pos < OG_remaining()) {
                     upgrade = true;
-                    pos = oStart + oSold++;
+                    card_pos = oStart + oSold++;
                     og_pointer = bump(oSold,oPending,og_stop,og_pointer);
-                } else if (pos <= OG_remaining() + ALPHA_remaining()) {
+                    emit UpgradeToOG(tokenID, card_pos);
+                } else if (draw_pos < OG_remaining() + ALPHA_remaining()) {
                     upgrade = true;
-                    pos = aStart + aSold++;
+                    card_pos = aStart + aSold++;
                     alpha_pointer = bump(aSold , aPending , alpha_stop,alpha_pointer);
+                    emit UpgradeToAlpha(tokenID, card_pos);
                 } else {
-                    upgrade = false;
-                    pos = cStart + cSold++;
+                    card_pos = cStart + cSold++;
+                    emit AssignedCommon(tokenID,card_pos);
                 }
-                if (upgrade) {
-                    emit Upgrade(tID, pos);
-                    // the Random[x] is now no longer a random card
-                    serialToTokenId[pos] = tID; // move the tokenId
-                    uint tailTokenID = serialToTokenId[cStart+cSold+cPending];
-                    if (tailTokenID == 0) {
-                        emit BadEnd(tailTokenID, cStart,cSold,cPending);
-                    } else {
-                        emit GoodEnd(tailTokenID, cStart,cSold,cPending);
-                    }
-                    serialToTokenId[cStart+cSold] = tailTokenID; // bring last in to fill gap
-                }
-                // cSold++; // <--- still necessary MAYBE NOT
-                cPending--;
             } else {
-                pos = cStart + cSold++;
-                cPending--;
+                card_pos = cStart + cSold++;
+                emit AssignedCommon(tokenID,card_pos);
             }
+            serialToTokenId[card_pos] = tokenID; // move the tokenId
         } else {
+            emit NothingToDo();
             return; // NOTHING TO DO
         }
         uint256 chance = r & tr_ass_order_mask;
         emit Chance(chance);
-        
-        uint256 tokenId = serialToTokenId[pos];
-        tokenIdToSerial[tokenId] = pos; 
+        uint256 tokenId = serialToTokenId[card_pos];
+        tokenIdToSerial[tokenId] = card_pos; 
         traitAssignmentOrder[tokenId] = chance+1;
-        emit Resolution(pos,tokenId,chance);
+        emit Resolution(card_pos,tokenId,chance+1);
     }
 
     function bump(uint sold, uint pending, uint[] memory stop, uint pointer) internal pure returns (uint256) {
@@ -417,7 +440,14 @@ contract ethercards is ERC721 , Ownable, Pausable{
     //            card{j}.trait_assignment_order == card{j+1}.trait_assignment_order amd serNo[j] < serNo[j+1]
     //            AND card{j}.trait_assignment_order < card{j+1}.trait_assignment_order 
  
-    function FinaliseTokenOrder(uint16[] memory tokenIds, uint16[] memory traits, uint256 _numberToProcess) public onlyAllowed {
+    event BadTraits(
+        uint position,
+        uint prevTokenId, uint thisTokenId, 
+        uint prevAssignmentOrder, uint thisAssigmentOrder,
+        uint prevSerialNumber, uint thisSerialNumber,
+        CardType cardType);
+
+    function FinaliseTokenOrder(uint16[] memory tokenIds, uint256[] memory traits, uint256 _numberToProcess) public onlyAllowed {
         CardType ct;
         require (keccak256(abi.encodePacked(traits)) == traitHash,"invalid Traits Hash");
         bytes32 idHash = keccak256(abi.encodePacked(tokenIds));
@@ -429,38 +459,75 @@ contract ethercards is ERC721 , Ownable, Pausable{
         }
         require(!finalised,"This Data is already finalised");
         uint256 numberToProcess = Math.min(tokenIds.length, _numberToProcess);
-        uint start = startPos;
-        uint end   = Math.min(startPos + numberToProcess,cMax+1);
-        for (uint256 i = start; i < numberToProcess; i++) {
-            if (i < 10 || i == 10 || i == 100 || i == 1000) {
-                // founder card or first in any sequence
-                cardTraits[tokenIds[i]] = traits[i];
-                if (i == 10) ct =CardType.OG;
-                if (i == 100) ct =CardType.Alpha;
-                if (i == 1000) ct =CardType.Common;
-                
-                continue;
+        {
+            uint start = startPos;
+            uint end   = Math.min(startPos + numberToProcess,cMax+1);
+            for (uint256 i = start; i < numberToProcess; i++) {
+                uint thisTokenId = tokenIds[i];
+                cardTraits[thisTokenId] = traits[i];
+                uint prevTokenId = tokenIds[i-1];
+                if (i <= 10 || i == 100 || i == 1000) {
+                    // founder card or first in any sequence
+                    ct = cardType(thisTokenId);
+                    continue;
+                }
+                if (!validate(tokenIds[i-1],tokenIds[i],ct)) {
+                    emit BadTraits(i, 
+                        prevTokenId,thisTokenId,
+                        traitAssignmentOrder[prevTokenId] ,traitAssignmentOrder[thisTokenId], 
+                        tokenIdToSerial[prevTokenId] , tokenIdToSerial[thisTokenId]  ,ct );
+                }
             }
-            require(validate(tokenIds[i-1],tokenIds[i],ct),"tokenIds in wrong order");
-            cardTraits[tokenIds[i]] = traits[i];
-        }
-        if (end == cMax+1) {
-            finalised = true;
-            emit FinalisationComplete();
-        } else {
-            startPos = end;
-            emit FinalisingUpTo(end,traits.length);
+            
+            if (end == cMax+1) {
+                finalised = true;
+                emit FinalisationComplete();
+            } else {
+                startPos = end;
+                emit FinalisingUpTo(end,traits.length);
+            }
         }
     }
 
-    function validate(uint prevTokenId, uint tokenId, CardType ct) internal view returns (bool) {
-        require(
-            (traitAssignmentOrder[prevTokenId] < traitAssignmentOrder[tokenId]) ||
-            ((traitAssignmentOrder[prevTokenId] == traitAssignmentOrder[tokenId]) && (tokenIdToSerial[prevTokenId] < tokenIdToSerial[tokenId])),
-            "Traits in incorrect order");
+    event WrongCardType(uint tokenId, uint serial, CardType found, CardType expected);
+    event DifferentCardTypes(uint prevTokenId, uint prevSerial, uint tokenId, uint serial, CardType thisCard , CardType prevCard );
+    event BadAssignmentOrder(uint prevTokenID, uint tokenID, uint prevAssignmentOrder, uint thisAssignmentorder);
+    event BadSerialOrder(uint prevTokenID, uint tokenID, uint prevAssignmentOrder, uint thisAssignmentorder);
+
+
+    function validate(uint prevTokenId, uint tokenId, CardType ct) internal  returns (bool) {
+        uint thisOrder = traitAssignmentOrder[tokenId];
+        uint prevOrder =  traitAssignmentOrder[prevTokenId];
+        uint thisSerial = tokenIdToSerial[tokenId];
+        uint prevSerial = tokenIdToSerial[prevTokenId];
+        bool shouldThrow = true;
+        if (shouldThrow) {
+            require(
+                (prevOrder < thisOrder) ||
+                ((prevOrder == thisOrder) && (prevSerial < thisSerial)),
+                "Traits in incorrect order");
+                require(cardType(tokenId) == ct,"Cards of wrong type");
+                require(cardType(tokenId) == cardType(prevTokenId),"Cards of different types");
+        } else {
+            if (prevOrder > thisOrder) {
+                emit BadAssignmentOrder(prevTokenId,tokenId,prevOrder,thisOrder);
+                return false;
+            }
+            if ((prevOrder == thisOrder) && (prevSerial > thisSerial)) {
+                emit BadSerialOrder(prevTokenId,tokenId,prevSerial,thisSerial);
+                return false;
+            }
+            if (cardType(tokenId) != ct) {
+                emit WrongCardType(tokenId, tokenIdToSerial[tokenId], cardType(tokenId) ,ct);
+                return false;
+            }
+            if (cardType(tokenId) != cardType(prevTokenId)) {
+                emit DifferentCardTypes(prevTokenId, tokenIdToSerial[prevTokenId], tokenId, tokenIdToSerial[tokenId], cardType(tokenId) , cardType(prevTokenId) );
+                return false;
+            }
+        }
         // ensure that the traits are in same group
-        require(cardType(tokenId) == ct,"Cards of wrong type");
-        require(cardType(tokenId) == cardType(prevTokenId),"Cards of different types");
+        return true;
     }
 
         
@@ -490,6 +557,10 @@ contract ethercards is ERC721 , Ownable, Pausable{
         return tokenIdToSerial[tokenId];
     }
 
+        function serialToTokenID(uint serial) public view returns (uint256) {
+        return serialToTokenId[serial];
+    }
+
     function fullTrait(uint256 tokenId) public view returns (uint256) {
         return cardTraits[tokenId];
     }
@@ -503,49 +574,61 @@ contract ethercards is ERC721 , Ownable, Pausable{
         return CardType.Common;
     }
 
-    function frameTrait(uint tokenId) public view returns(uint256) {
-        return (fullTrait(tokenId) >> frame_trait_offset) & frame_trait_mask;
+     function traitAssignment(uint256 tokenId) external view returns (uint256) {
+        return traitAssignmentOrder[tokenId];
     }
 
- 
-    function pictureTrait(uint tokenId) public view returns(uint256) {
-        return (fullTrait(tokenId) >> picture_trait_offset) & picture_trait_mask;
-    }
-
-    function featureTrait(uint tokenId) public view returns(uint256) {
-        return (fullTrait(tokenId) >> feature_trait_offset) & feature_trait_mask;
-    }
-
-    function faketoshiTrait(uint256 tokenId) public view returns (uint256) {
-        return (fullTrait(tokenId) >> faketoshi_trait_offset) & faketoshi_trait_mask;
-    }
-
-    function extraTrait(uint256 tokenId) public view returns (uint256) {
-        return (fullTrait(tokenId) >> extra_trait_offset);
-    }
-   
- function OG_next() external view returns (uint256 left, uint256 nextPrice) {
-        return CARD_next(og_stop,oSold,oPending,og_pointer);
-        // left = og_stop[og_pointer] - (oSold + oPending);
-        // if (og_pointer < og_stop.length - 1)
-        //     nextPrice = og_stop[og_pointer+1];
-        // else
-            // nextPrice = og_stop[og_pointer+1];
+  
+    function OG_next() external view returns (uint256 left, uint256 nextPrice) {
+        return CARD_next(og_stop, og_price, oSold,oPending,og_pointer);
     }
 
     function ALPHA_next() external view returns (uint256 left, uint256 nextPrice) {
-            return CARD_next(alpha_stop,aSold,aPending,alpha_pointer);
+            return CARD_next(alpha_stop, alpha_price, aSold,aPending,alpha_pointer);
     }
     function RANDOM_next() external view returns (uint256 left, uint256 nextPrice) {
-            return CARD_next(random_stop,cSold,cPending,random_pointer);
+            return CARD_next(random_stop, random_price, cSold,pendingRandoms(),random_pointer);
     }
 
-    function CARD_next(uint256[] storage stop, uint256 sold, uint256 pending, uint256 pointer) internal view returns (uint256 left, uint256 nextPrice) {
+    function CARD_next(uint256[] storage stop, uint256[] memory price, uint256 sold, uint256 pending, uint256 pointer) internal view returns (uint256 left, uint256 nextPrice) {
         left = stop[pointer] - (sold + pending);
         if (pointer < stop.length - 1)
-            nextPrice = stop[pointer+1];
+            nextPrice = price[pointer+1];
         else
-            nextPrice = stop[pointer];
+            nextPrice = price[pointer];
     }
+
+        function drain(xERC20 token) external onlyOwner {
+        if (address(token) == 0x0000000000000000000000000000000000000000) {
+            payable(owner()).transfer(address(this).balance);
+        } else {
+            token.transfer(owner(),token.balanceOf(address(this)));
+        }
+    }
+
+    bool _FuzeBlown;
+    // after finalization the images will be assigned to match the trait data
+    // but due to onboarding more artists we will have a late assignment.
+    // when it is proven OK we burn
+    function setDataFolder(string memory _baseURI) external onlyAllowed {
+        require(!_FuzeBlown,"This data can no longer be changed");
+        _setBaseURI(_baseURI);
+    }
+
+    function burnDataFolder() external onlyAllowed {
+        _FuzeBlown = true;
+    }
+
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        CardType ct = cardType(tokenId);
+        if (ct == CardType.Unresolved) {
+            return "https://temp.ether.cards/metadata/Unresolved";
+        }
+        if (! _FuzeBlown) {
+            return string(abi.encodePacked("https://temp.ether.cards/metadata/",ct));
+        }
+        return super.tokenURI(tokenId);
+    }
+
 
 }

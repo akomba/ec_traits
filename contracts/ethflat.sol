@@ -3837,8 +3837,5 @@ contract ethercards is ERC721 , Ownable, Pausable{
         else
             nextPrice = stop[pointer];
     }
-18m
-
-
 
 }
